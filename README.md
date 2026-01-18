@@ -181,7 +181,7 @@ MIT License - Feel free to use this project for learning and portfolio purposes.
 
 ## Author
 
-Created as a portfolio project demonstrating:
+Created by Val Rique Tajaros as a portfolio project demonstrating:
 - Desktop application development with Python
 - Qt/PySide6 GUI programming
 - Clean code architecture
