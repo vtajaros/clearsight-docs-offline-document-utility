@@ -1,0 +1,3 @@
+# Mark vendored dependencies to exclude from GitHub language statistics
+tesseract-portable/** linguist-vendored
+poppler-portable/** linguist-vendored
