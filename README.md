@@ -74,10 +74,14 @@ A modern, fully offline desktop application for PDF and image manipulation built
 
 1. **Clone or download this repository**
 
+```bash
+git clone https://github.com/vtajaros/ClearSight-Docs-Offline-Document-Tool-.git
+cd ClearSight-Docs-Offline-Document-Tool-
+```
+
 2. **Install dependencies**
 
 ```bash
-cd pdf-toolkit
 pip install -r requirements.txt
 ```
 
@@ -87,10 +91,18 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Windows Installer
+
+For end users, a Windows installer is available that bundles everything including Tesseract OCR and Poppler:
+
+1. Download `ClearSightDocs_Setup.exe` from the [Releases](https://github.com/vtajaros/ClearSight-Docs-Offline-Document-Tool-/releases) page
+2. Run the installer and follow the prompts
+3. Launch ClearSight Docs from the Start Menu or Desktop shortcut
+
 ## Project Structure
 
 ```
-pdf-toolkit/
+ClearSight-Docs/
 │
 ├── main.py                 # Application entry point
 │
@@ -101,16 +113,36 @@ pdf-toolkit/
 │       ├── __init__.py
 │       ├── image_to_pdf_page.py
 │       ├── pdf_merge_page.py
-│       └── pdf_split_page.py
+│       ├── pdf_split_page.py
+│       ├── pdf_to_images_page.py
+│       ├── pdf_compress_page.py
+│       ├── pdf_extract_pages_page.py
+│       ├── pdf_delete_pages_page.py
+│       ├── pdf_to_word_page.py
+│       └── ocr_page.py
 │
 ├── services/               # Business logic and file processing
 │   ├── __init__.py
 │   ├── image_to_pdf_service.py
 │   ├── pdf_merge_service.py
-│   └── pdf_split_service.py
+│   ├── pdf_split_service.py
+│   ├── pdf_to_images_service.py
+│   ├── pdf_compress_service.py
+│   ├── pdf_extract_pages_service.py
+│   ├── pdf_delete_pages_service.py
+│   ├── pdf_to_word_service.py
+│   └── ocr_service.py
 │
 ├── utils/                  # Helper functions and utilities
 │   └── __init__.py
+│
+├── installer/              # Windows installer build scripts
+│   ├── build_installer.bat
+│   ├── ClearSightDocs.iss
+│   └── INSTALLER_README.md
+│
+├── tesseract-portable/     # Bundled Tesseract OCR engine
+├── poppler-portable/       # Bundled Poppler PDF utilities
 │
 ├── requirements.txt        # Python dependencies
 └── README.md              # This file
@@ -123,6 +155,10 @@ pdf-toolkit/
 - **Pillow** - Image processing library
 - **img2pdf** - Efficient image-to-PDF conversion
 - **pypdf** - PDF manipulation and processing
+- **pdf2image** - PDF to image conversion (uses Poppler)
+- **pytesseract** - Python wrapper for Tesseract OCR
+- **Tesseract OCR** - Optical character recognition engine
+- **Poppler** - PDF rendering library
 
 ## Usage
 
@@ -149,6 +185,50 @@ pdf-toolkit/
    - **Extract page range**: Specify start and end pages
    - **Split into individual pages**: Creates separate PDF for each page
 4. Click "Split PDF" and choose save location/directory
+
+### PDF to Images
+
+1. Click on "PDF to Images" in the sidebar
+2. Select a PDF file to convert
+3. Choose output format (PNG or JPG)
+4. Set DPI/quality settings as needed
+5. Click "Convert" and choose output folder
+
+### Compress PDF
+
+1. Click on "Compress PDF" in the sidebar
+2. Select a PDF file to compress
+3. Choose compression level (Low, Medium, High)
+4. Click "Compress" and choose save location
+
+### Extract Pages
+
+1. Click on "Extract Pages" in the sidebar
+2. Select a PDF file
+3. Specify which pages to extract (e.g., 1-3, 5, 7-10)
+4. Click "Extract" and choose save location
+
+### Delete Pages
+
+1. Click on "Delete Pages" in the sidebar
+2. Select a PDF file
+3. Preview the pages and select which ones to delete
+4. Click "Delete Pages" and save the modified PDF
+
+### PDF to Word
+
+1. Click on "PDF to Word" in the sidebar
+2. Select a PDF file to convert
+3. Click "Convert to Word" and choose save location
+4. The text content will be extracted into a Word document
+
+### OCR (Text Recognition)
+
+1. Click on "OCR" in the sidebar
+2. Select a scanned PDF or image file
+3. Choose the language (English by default)
+4. Click "Extract Text" to perform OCR
+5. Copy the extracted text or save it to a file
 
 ## Development
 
@@ -213,6 +293,8 @@ MIT License - Feel free to use this project for learning and portfolio purposes.
 - Built with [PySide6](https://www.qt.io/qt-for-python) (Qt for Python)
 - Uses [img2pdf](https://gitlab.mister-muffin.de/josch/img2pdf) for image conversion
 - PDF handling powered by [pypdf](https://github.com/py-pdf/pypdf)
+- OCR powered by [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
+- PDF rendering by [Poppler](https://poppler.freedesktop.org/)
 
 ## Author
 
