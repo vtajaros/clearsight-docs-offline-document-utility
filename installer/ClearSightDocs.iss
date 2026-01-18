@@ -77,7 +77,8 @@ MinVersion=6.1sp1
 ; Architecture support
 ; ArchitecturesAllowed: which architectures the installer can run on
 ; ArchitecturesInstallIn64BitMode: install 64-bit components when on 64-bit Windows
-ArchitecturesAllowed=x64compatible x86compatible
+; Note: Restricted to 64-bit only because bundled Tesseract and Poppler are 64-bit
+ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 ; Privileges: admin required for Program Files installation
@@ -234,15 +235,20 @@ begin
   S := S + 'Bundled Components:' + NewLine;
   S := S + Space + 'ClearSight Docs application' + NewLine;
   
-  if DirExists(ExpandConstant('{#TesseractDir}')) then
-    S := S + Space + 'Tesseract OCR engine' + NewLine
-  else
-    S := S + Space + 'Tesseract OCR (not bundled - OCR features may not work)' + NewLine;
-  
-  if DirExists(ExpandConstant('{#PopplerDir}')) then
-    S := S + Space + 'Poppler PDF utilities' + NewLine
-  else
-    S := S + Space + 'Poppler (not bundled - some features may be limited)' + NewLine;
+  // Check if Tesseract files exist in the installer source directory
+  // {src} is the temp directory where installer extracts files, but we need to check source at compile time
+  // Using preprocessor to check at compile time:
+#if DirExists(AddBackslash(SourcePath) + "..\dist\tesseract")
+  S := S + Space + 'Tesseract OCR engine' + NewLine;
+#else
+  S := S + Space + 'Tesseract OCR (not bundled - OCR features may not work)' + NewLine;
+#endif
+
+#if DirExists(AddBackslash(SourcePath) + "..\dist\poppler")
+  S := S + Space + 'Poppler PDF utilities' + NewLine;
+#else
+  S := S + Space + 'Poppler (not bundled - some features may be limited)' + NewLine;
+#endif
   
   Result := S;
 end;

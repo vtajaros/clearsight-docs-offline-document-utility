@@ -1,14 +1,15 @@
-# PDF Toolkit - Offline Document Utility
+# ClearSight Docs - Offline Document Utility
 
 A modern, fully offline desktop application for PDF and image manipulation built with Python and PySide6.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![PySide6](https://img.shields.io/badge/PySide6-Qt-green)
+![Windows](https://img.shields.io/badge/Windows-64--bit-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ## Features
 
-### ✨ Current Features (MVP)
+### ✨ Current Features
 
 - **Image to PDF Conversion**
   - Support for JPG and PNG formats
@@ -27,6 +28,32 @@ A modern, fully offline desktop application for PDF and image manipulation built
   - Extract specific page ranges
   - Split into individual pages
   - Batch processing support
+
+- **PDF to Images**
+  - Convert PDF pages to image files
+  - Support for PNG, JPG output formats
+  - Configurable DPI/quality settings
+
+- **PDF Compression**
+  - Reduce PDF file size
+  - Multiple compression levels
+
+- **PDF Extract Pages**
+  - Extract specific pages from a PDF
+  - Create new PDF from selected pages
+
+- **PDF Delete Pages**
+  - Remove unwanted pages from PDF
+  - Preview before deletion
+
+- **PDF to Word**
+  - Convert PDF documents to Word format
+  - Preserves text content
+
+- **OCR (Optical Character Recognition)**
+  - Extract text from scanned PDFs and images
+  - Powered by Tesseract OCR engine
+  - Bundled with installer (no separate installation needed)
 
 ## Screenshots
 
@@ -144,26 +171,30 @@ To add a new tool:
 3. Add navigation button in `main_window.py`
 4. Register the page in the stacked widget
 
-## Requirements
+## System Requirements
 
+- **Windows 10/11 (64-bit)** - Required for the installer version
 - No internet connection required
 - Works completely offline
-- Cross-platform (Windows, macOS, Linux)
 - Lightweight and fast
+
+> **Note:** The Windows installer requires 64-bit Windows due to bundled Tesseract OCR and Poppler dependencies. Running from source may work on other platforms.
 
 ## Future Enhancements
 
 Potential features for future versions:
 
-- [ ] PDF compression
-- [ ] PDF to images conversion
+- [x] PDF compression
+- [x] PDF to images conversion
+- [x] OCR (Optical Character Recognition)
+- [x] PDF to Word conversion
+- [x] PDF extract/delete pages
 - [ ] PDF rotation
 - [ ] Watermark addition
 - [ ] PDF encryption/decryption
-- [ ] OCR (Optical Character Recognition)
 - [ ] Batch processing automation
 - [ ] Dark mode theme
-- [ ] Multi-language support
+- [ ] Multi-language OCR support
 
 ## Contributing
 

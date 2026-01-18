@@ -2,6 +2,8 @@
 
 This folder contains all the scripts and configuration needed to create a Windows installer for ClearSight Docs.
 
+> **Note:** The installer is configured for **64-bit Windows only** due to bundled Tesseract OCR and Poppler dependencies.
+
 ## 📋 Prerequisites
 
 Before building the installer, ensure you have:
@@ -215,9 +217,10 @@ signtool sign /a /t http://timestamp.digicert.com Output\ClearSightDocs_Setup.ex
 
 Before distributing:
 
-- [ ] Test on clean Windows 11 machine (or VM)
+- [ ] Test on clean **64-bit** Windows 10/11 machine (or VM)
 - [ ] Verify all features work without Python installed
 - [ ] Check OCR works with bundled Tesseract
+- [ ] Check PDF to Images works with bundled Poppler
 - [ ] Verify shortcuts are created correctly
 - [ ] Test uninstallation removes all files
 - [ ] Consider code signing for trust
