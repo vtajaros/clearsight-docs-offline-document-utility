@@ -57,7 +57,11 @@ A modern, fully offline desktop application for PDF and image manipulation built
 
 ## Screenshots
 
-*Coming soon*
+<img width="1918" height="1012" alt="image" src="https://github.com/user-attachments/assets/0e1d091b-1f44-414e-ab48-3c45b136c4ec" />
+<img width="1916" height="1021" alt="image" src="https://github.com/user-attachments/assets/5d7c2ade-e7da-4fd2-a628-fc763eb3ab68" />
+<img width="1919" height="1018" alt="image" src="https://github.com/user-attachments/assets/0d954fa4-c0c8-44e9-8f3c-791f9ecd2174" />
+<img width="1918" height="1016" alt="image" src="https://github.com/user-attachments/assets/6898fb3e-8e22-4964-883e-9d0fbb0af2da" />
+
 
 ## Installation
 
