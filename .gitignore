@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Project specific
+*.pdf
+*.jpg
+*.jpeg
+*.png
+test_output/
+
+# -----------------------------------------------------------------------------
+# PyInstaller & Build Artifacts (ClearSight Docs)
+# -----------------------------------------------------------------------------
+*.toc
+*.pyz
+*.pkg
+*.exe
+build_log.txt
+warn-*.txt
+base_library.zip
+
+# -----------------------------------------------------------------------------
+# C/C++ / Tesseract Build Artifacts (tesseract-5.5.2)
+# -----------------------------------------------------------------------------
+*.log
+*.tlog
+*.cache
+*.obj
+*.lastbuildstate
+tesseract.pc
+config_auto.h
+config.*
+Makefile
+Makefile.in
+*.m4
+configure
+libtool
