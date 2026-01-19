@@ -2,6 +2,7 @@
 
 A modern, fully offline desktop application for PDF and image manipulation built with Python and PySide6.
 
+![Version](https://img.shields.io/badge/Version-1.6.0-brightgreen)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![PySide6](https://img.shields.io/badge/PySide6-Qt-green)
 ![Windows](https://img.shields.io/badge/Windows-64--bit-blue)
@@ -14,6 +15,7 @@ A modern, fully offline desktop application for PDF and image manipulation built
 - **Image to PDF Conversion**
   - Support for JPG and PNG formats
   - Multiple image selection with drag-and-drop
+  - Click-to-browse drop zones for easy file selection
   - Visual reordering of images before conversion
   - Page size options (A4, Letter, Legal)
   - Orientation control (Portrait/Landscape)
@@ -22,11 +24,14 @@ A modern, fully offline desktop application for PDF and image manipulation built
 - **PDF Merge**
   - Combine multiple PDF files into one
   - Drag-and-drop reordering
+  - Click-to-browse drop zones
+  - Loading protection to prevent UI freezing
   - Maintains original quality
 
 - **PDF Split**
   - Extract specific page ranges
   - Split into individual pages
+  - Click-to-browse drop zones
   - Batch processing support
 
 - **PDF to Images**
@@ -41,10 +46,14 @@ A modern, fully offline desktop application for PDF and image manipulation built
 - **PDF Extract Pages**
   - Extract specific pages from a PDF
   - Create new PDF from selected pages
+  - Click-to-browse drop zones
+  - Loading protection during file processing
 
 - **PDF Delete Pages**
   - Remove unwanted pages from PDF
   - Preview before deletion
+  - Click-to-browse drop zones
+  - Loading protection during file processing
 
 - **PDF to Word**
   - Convert PDF documents to Word format
@@ -54,6 +63,14 @@ A modern, fully offline desktop application for PDF and image manipulation built
   - Extract text from scanned PDFs and images
   - Powered by Tesseract OCR engine
   - Bundled with installer (no separate installation needed)
+
+### 🆕 What's New in v1.6.0
+
+- **Help Menu & About Dialog**: New Help menu with About dialog showing version info
+- **Automatic Update Checker**: Checks for new versions on GitHub with download prompts
+- **Click-to-Browse Drop Zones**: Click anywhere on drop zones to browse files
+- **Loading State Protection**: Prevents UI freezing when loading large files
+- **Improved Taskbar Icon**: Fixed icon not appearing on first launch after installation
 
 ## Screenshots
 
@@ -75,8 +92,8 @@ A modern, fully offline desktop application for PDF and image manipulation built
 1. **Clone or download this repository**
 
 ```bash
-git clone https://github.com/vtajaros/ClearSight-Docs-Offline-Document-Tool-.git
-cd ClearSight-Docs-Offline-Document-Tool-
+git clone https://github.com/vtajaros/clearsight-docs-offline-document-utility.git
+cd clearsight-docs-offline-document-utility
 ```
 
 2. **Install dependencies**
@@ -95,7 +112,7 @@ python main.py
 
 For end users, a Windows installer is available that bundles everything including Tesseract OCR and Poppler:
 
-1. Download `ClearSightDocs_Setup.exe` from the [Releases](https://github.com/vtajaros/ClearSight-Docs-Offline-Document-Tool-/releases) page
+1. Download `ClearSightDocs_Setup.exe` from the [Releases](https://github.com/vtajaros/clearsight-docs-offline-document-utility/releases) page
 2. Run the installer and follow the prompts
 3. Launch ClearSight Docs from the Start Menu or Desktop shortcut
 
@@ -273,6 +290,9 @@ Potential features for future versions:
 - [x] OCR (Optical Character Recognition)
 - [x] PDF to Word conversion
 - [x] PDF extract/delete pages
+- [x] Help menu with About dialog
+- [x] Automatic update checker
+- [x] Click-to-browse drop zones
 - [ ] PDF rotation
 - [ ] Watermark addition
 - [ ] PDF encryption/decryption

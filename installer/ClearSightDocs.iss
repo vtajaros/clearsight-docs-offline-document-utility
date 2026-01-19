@@ -21,9 +21,9 @@
 ; ============================================================================
 
 #define MyAppName "ClearSight Docs"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.6.0"
 #define MyAppPublisher "vtajaros"
-#define MyAppURL "https://github.com/vtajaros/clearsight-docs"
+#define MyAppURL "https://github.com/vtajaros/clearsight-docs-offline-document-utility"
 #define MyAppExeName "ClearSightDocs.exe"
 #define MyAppDescription "PDF Toolkit - Convert, Merge, Split, OCR and more"
 

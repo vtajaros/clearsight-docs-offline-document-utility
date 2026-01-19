@@ -200,6 +200,8 @@ class PDFToWordPage(QWidget):
         self.drop_zone.dragEnterEvent = self._drag_enter_event
         self.drop_zone.dragMoveEvent = self._drag_move_event
         self.drop_zone.dropEvent = self._drop_event
+        self.drop_zone.mousePressEvent = self._drop_zone_clicked
+        self.drop_zone.setCursor(Qt.CursorShape.PointingHandCursor)
         
         group_layout.addWidget(self.drop_zone)
         
@@ -387,6 +389,12 @@ class PDFToWordPage(QWidget):
                     return
         event.ignore()
     
+    def _drop_zone_clicked(self, event):
+        """Handle click on drop zone to open file browser."""
+        # Only trigger browse if no file is loaded
+        if self.selected_pdf is None:
+            self._select_pdf()
+    
     def _select_pdf(self):
         """Open file dialog to select a PDF."""
         file_path, _ = QFileDialog.getOpenFileName(
@@ -402,6 +410,9 @@ class PDFToWordPage(QWidget):
     def _load_pdf(self, file_path: str):
         """Load and analyze a PDF file."""
         self.selected_pdf = file_path
+        
+        # Change cursor to default since file is now loaded
+        self.drop_zone.setCursor(Qt.CursorShape.ArrowCursor)
         
         # Update file label
         file_name = Path(file_path).name

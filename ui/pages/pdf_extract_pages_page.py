@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QGroupBox, QFileDialog, QProgressBar, QMessageBox,
     QFrame, QListWidget, QListWidgetItem, QAbstractItemView,
-    QListView, QSplitter, QScrollArea, QCheckBox
+    QListView, QSplitter, QScrollArea, QCheckBox, QApplication
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPixmap, QIcon, QImage, QFont
@@ -35,6 +35,7 @@ class PdfExtractPagesPage(QWidget):
         self.page_thumbnails = []  # Store page pixmaps for preview
         self.current_preview_page = -1  # Currently previewed page
         self.zoom_level = 1.0  # Zoom level for preview
+        self._is_loading = False  # Flag to track if PDF is being loaded
         self._init_ui()
         
     def _init_ui(self):
@@ -144,6 +145,8 @@ class PdfExtractPagesPage(QWidget):
         self.drop_zone.dragEnterEvent = self._drag_enter_event
         self.drop_zone.dragMoveEvent = self._drag_move_event
         self.drop_zone.dropEvent = self._drop_event
+        self.drop_zone.mousePressEvent = self._drop_zone_clicked
+        self.drop_zone.setCursor(Qt.CursorShape.PointingHandCursor)
         
         group_layout.addWidget(self.drop_zone)
         
@@ -341,6 +344,9 @@ class PdfExtractPagesPage(QWidget):
     
     def _drag_enter_event(self, event):
         """Handle drag enter event for file drops."""
+        if self._is_loading:
+            event.ignore()
+            return
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 if url.toLocalFile().lower().endswith('.pdf'):
@@ -350,6 +356,9 @@ class PdfExtractPagesPage(QWidget):
     
     def _drag_move_event(self, event):
         """Handle drag move event for file drops."""
+        if self._is_loading:
+            event.ignore()
+            return
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 if url.toLocalFile().lower().endswith('.pdf'):
@@ -359,6 +368,9 @@ class PdfExtractPagesPage(QWidget):
     
     def _drop_event(self, event):
         """Handle drop event for file drops."""
+        if self._is_loading:
+            event.ignore()
+            return
         if event.mimeData().hasUrls():
             for url in event.mimeData().urls():
                 file_path = url.toLocalFile()
@@ -368,8 +380,16 @@ class PdfExtractPagesPage(QWidget):
                     return
         event.ignore()
     
+    def _drop_zone_clicked(self, event):
+        """Handle click on drop zone to open file browser."""
+        # Only trigger browse if no file is loaded and not currently loading
+        if self.selected_pdf is None and not self._is_loading:
+            self._select_pdf()
+    
     def _select_pdf(self):
         """Open file dialog to select a PDF."""
+        if self._is_loading:
+            return
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select PDF File",
@@ -382,6 +402,8 @@ class PdfExtractPagesPage(QWidget):
     
     def _clear_pdf(self):
         """Clear the loaded PDF."""
+        if self._is_loading:
+            return
         self.selected_pdf = None
         self.total_pages = 0
         self.page_thumbnails.clear()
@@ -394,14 +416,22 @@ class PdfExtractPagesPage(QWidget):
         self.preview_label.setText("Select a page to preview")
         self.preview_label.setPixmap(QPixmap())
         self.page_info_label.setText("")
+        # Restore click-to-browse cursor
+        self.drop_zone.setCursor(Qt.CursorShape.PointingHandCursor)
         self.status_label.setVisible(False)
     
     def _load_pdf(self, file_path: str):
         """Load a PDF file and display page thumbnails."""
+        if self._is_loading:
+            return
+        
+        self._is_loading = True
         self.selected_pdf = file_path
-        self.file_label.setText(f"📄 {Path(file_path).name}")
+        self.file_label.setText(f"⏳ Loading {Path(file_path).name}...")
         self.file_label.setStyleSheet("color: #2c3e50; font-style: normal; font-weight: bold; border: none; background: transparent;")
-        self.clear_button.setVisible(True)
+        self.clear_button.setVisible(False)  # Disable clear while loading
+        # Change cursor since file is being loaded
+        self.drop_zone.setCursor(Qt.CursorShape.ArrowCursor)
         
         # Clear previous data
         self.pages_list.clear()
@@ -457,8 +487,13 @@ class PdfExtractPagesPage(QWidget):
                 
                 self.progress_bar.setValue(page_num + 1)
                 
+                # Process events to keep UI responsive
+                QApplication.processEvents()
+                
             doc.close()
             
+            self.file_label.setText(f"📄 {Path(file_path).name}")
+            self.clear_button.setVisible(True)
             self.content_splitter.setVisible(True)
             self._update_selection_status()
             self.progress_bar.setVisible(False)
@@ -467,6 +502,8 @@ class PdfExtractPagesPage(QWidget):
             QMessageBox.warning(self, "Warning", f"Could not read PDF:\n{str(e)}")
             self.selected_pdf = None
             self.progress_bar.setVisible(False)
+        finally:
+            self._is_loading = False
     
     def _on_page_clicked(self, item):
         """Handle page click for preview."""

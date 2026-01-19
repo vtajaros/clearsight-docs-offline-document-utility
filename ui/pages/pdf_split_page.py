@@ -117,6 +117,8 @@ class PdfSplitPage(QWidget):
         self.drop_zone.dragEnterEvent = self._drag_enter_event
         self.drop_zone.dragMoveEvent = self._drag_move_event
         self.drop_zone.dropEvent = self._drop_event
+        self.drop_zone.mousePressEvent = self._drop_zone_clicked
+        self.drop_zone.setCursor(Qt.CursorShape.PointingHandCursor)
         
         group_layout.addWidget(self.drop_zone)
         
@@ -227,11 +229,20 @@ class PdfSplitPage(QWidget):
         if file_path:
             self._load_pdf(file_path)
     
+    def _drop_zone_clicked(self, event):
+        """Handle click on drop zone to open file browser."""
+        # Only trigger browse if no file is loaded
+        if self.selected_pdf is None:
+            self._select_pdf()
+    
     def _load_pdf(self, file_path: str):
         """Load a PDF file and update the UI."""
         self.selected_pdf = file_path
         self.file_label.setText(f"📄 {Path(file_path).name}")
         self.file_label.setStyleSheet("color: #2c3e50; font-style: normal; font-weight: bold; border: none; background: transparent;")
+        
+        # Change cursor to default since file is now loaded
+        self.drop_zone.setCursor(Qt.CursorShape.ArrowCursor)
         
         # Get page count
         try:

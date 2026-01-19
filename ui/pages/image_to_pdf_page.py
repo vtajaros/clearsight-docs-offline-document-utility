@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
     QLabel, QComboBox, QGroupBox, QFileDialog, QProgressBar,
-    QMessageBox, QListWidgetItem, QAbstractItemView, QListView
+    QMessageBox, QListWidgetItem, QAbstractItemView, QListView, QApplication
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap, QFont
@@ -22,6 +22,7 @@ class ImageToPdfPage(QWidget):
     def __init__(self):
         super().__init__()
         self.image_files = []  # List to store selected image file paths
+        self._is_loading = False  # Flag to track if files are being loaded
         self._init_ui()
         
     def _init_ui(self):
@@ -253,6 +254,11 @@ class ImageToPdfPage(QWidget):
     
     def _drop_event(self, event):
         """Handle drop event for external file drops."""
+        # Ignore drops while loading
+        if self._is_loading:
+            event.ignore()
+            return
+            
         if event.mimeData().hasUrls():
             files = []
             for url in event.mimeData().urls():
@@ -273,6 +279,10 @@ class ImageToPdfPage(QWidget):
     
     def _add_images(self):
         """Open file dialog to add images."""
+        # Prevent adding files while loading
+        if self._is_loading:
+            return
+            
         files, _ = QFileDialog.getOpenFileNames(
             self,
             "Select Images",
@@ -285,29 +295,59 @@ class ImageToPdfPage(QWidget):
     
     def _add_image_files(self, files: list):
         """Add image files to the list with thumbnails."""
-        for file_path in files:
-            if file_path not in self.image_files:
-                self.image_files.append(file_path)
-                
-                # Create list item with thumbnail
-                thumbnail = self._create_thumbnail(file_path)
-                filename = Path(file_path).name
-                
-                # Truncate long filenames
-                display_name = filename if len(filename) <= 15 else filename[:12] + "..."
-                
-                item = QListWidgetItem(thumbnail, display_name)
-                item.setData(Qt.ItemDataRole.UserRole, file_path)
-                item.setToolTip(filename)  # Show full name on hover
-                item.setSizeHint(QSize(self.THUMBNAIL_SIZE + 20, self.THUMBNAIL_SIZE + 40))
-                # Make label bold for better visibility
-                font = item.font()
-                font.setBold(True)
-                item.setFont(font)
-                self.image_list.addItem(item)
+        # Prevent concurrent loading
+        if self._is_loading:
+            return
+        
+        self._is_loading = True
+        self._set_loading_ui_state(True)
+        
+        try:
+            for file_path in files:
+                if file_path not in self.image_files:
+                    self.image_files.append(file_path)
+                    
+                    # Create list item with thumbnail
+                    thumbnail = self._create_thumbnail(file_path)
+                    filename = Path(file_path).name
+                    
+                    # Truncate long filenames
+                    display_name = filename if len(filename) <= 15 else filename[:12] + "..."
+                    
+                    item = QListWidgetItem(thumbnail, display_name)
+                    item.setData(Qt.ItemDataRole.UserRole, file_path)
+                    item.setToolTip(filename)  # Show full name on hover
+                    item.setSizeHint(QSize(self.THUMBNAIL_SIZE + 20, self.THUMBNAIL_SIZE + 40))
+                    # Make label bold for better visibility
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
+                    self.image_list.addItem(item)
+                    
+                    # Process events to keep UI responsive during thumbnail generation
+                    QApplication.processEvents()
+        finally:
+            self._is_loading = False
+            self._set_loading_ui_state(False)
         
         self._update_button_states()
         self._update_drop_hint_visibility()
+    
+    def _set_loading_ui_state(self, loading: bool):
+        """Enable or disable UI elements during file loading."""
+        # Disable/enable buttons during loading
+        self.add_files_button.setEnabled(not loading)
+        self.remove_files_button.setEnabled(not loading and len(self.image_list.selectedItems()) > 0)
+        self.clear_files_button.setEnabled(not loading and self.image_list.count() > 0)
+        self.move_up_button.setEnabled(not loading)
+        self.move_down_button.setEnabled(not loading)
+        self.convert_button.setEnabled(not loading and self.image_list.count() > 0)
+        
+        # Update button text to show loading state
+        if loading:
+            self.add_files_button.setText("⏳ Loading...")
+        else:
+            self.add_files_button.setText("➕ Add Images")
     
     def _remove_selected_images(self):
         """Remove selected images from the list."""

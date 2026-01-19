@@ -23,13 +23,13 @@ REM ============================================================================
 
 REM Application info
 set APP_NAME=ClearSight Docs
-set APP_VERSION=1.5.0
+set APP_VERSION=1.6.0
 set APP_PUBLISHER=vtajaros
 set APP_EXE_NAME=ClearSightDocs.exe
 
 REM Paths (relative to this script's location in installer\ folder)
 set PROJECT_DIR=%~dp0..
-set VENV_DIR=%PROJECT_DIR%\..\.venv
+set VENV_DIR=%PROJECT_DIR%\.venv
 set DIST_DIR=%PROJECT_DIR%\dist
 set BUILD_DIR=%PROJECT_DIR%\build
 set INSTALLER_DIR=%~dp0
