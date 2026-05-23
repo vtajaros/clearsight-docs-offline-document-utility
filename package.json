@@ -1,0 +1,10 @@
+{
+    "name": "clearsight",
+    "private": true,
+    "scripts": {
+        "dev": "npm run dev --prefix frontend"
+    },
+    "dependencies": {
+        "pdfjs-dist": "^5.7.284"
+    }
+}

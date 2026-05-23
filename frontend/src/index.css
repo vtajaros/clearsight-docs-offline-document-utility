@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0a0a0a;
+  color: #f4f4f5;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  overflow: hidden;
+  border-top: none !important;
+}
+
+#root {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  display: flex !important;
+  flex-direction: row !important;
+}
+
+/* ── Custom Titlebar ─────────────────────────────────────────── */
+
+:root {
+  --titlebar-height: 36px;
+  --titlebar-bg: #0f0f0f;        /* match your darkest surface */
+  --titlebar-text: #e4e4e7;      /* zinc-200 */
+  --titlebar-icon-hover: #27272a; /* zinc-800 */
+  --titlebar-close-hover: #dc2626; /* red-600 */
+}
+
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--titlebar-height);
+  background: var(--titlebar-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 9999;
+  border-bottom: 1px solid #27272a; /* zinc-800 */
+  user-select: none;
+}
+
+.titlebar-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.titlebar-center img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  /* Let the browser use its best downscaling algorithm */
+  image-rendering: auto;
+  /* Force high-quality downscale on Chromium (Electron's engine) */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+.titlebar-title {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--titlebar-text);
+  white-space: nowrap;
+}
+
+/* Equal-width spacer on the left to balance the controls on the right */
+.titlebar-spacer {
+  width: 138px; /* 3 buttons × 46px each */
+  flex-shrink: 0;
+}
+
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+  margin-left: auto;
+}
+
+.titlebar-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: #a1a1aa;          /* zinc-400 — softer than full white */
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.titlebar-controls button:hover {
+  background: #27272a;     /* zinc-800 */
+  color: #e4e4e7;          /* zinc-200 — brighten on hover */
+}
+
+.titlebar-controls button.close-btn:hover {
+  background: #dc2626;     /* red-600 */
+  color: #fff;
+}
+
+/* Push main content below the titlebar */
+.app-root {
+  padding-top: var(--titlebar-height);
+}

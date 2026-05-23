@@ -1,0 +1,26 @@
+# ClearSight Docs — Backend Requirements
+# Python 3.10+
+
+# API Server
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# Image Processing
+Pillow>=10.0.0
+img2pdf>=0.5.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# PDF Processing
+pypdf>=3.17.0
+pymupdf>=1.23.0
+pdf2image>=1.16.0
+reportlab>=4.0.0
+
+# OCR
+pytesseract>=0.3.10
+
+# Testing
+pytest>=8.0.0
+httpx>=0.27.0
