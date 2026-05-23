@@ -134,7 +134,6 @@ app.whenReady().then(async () => {
         titleBarStyle: 'hidden',
         icon: path.join(app.getAppPath(), '..', 'icon.png'),
         autoHideMenuBar: true,
-        menuBarVisible: false,
         thickFrame: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),

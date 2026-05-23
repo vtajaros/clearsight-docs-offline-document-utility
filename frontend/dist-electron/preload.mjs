@@ -1,1 +1,14 @@
-let e=require("electron");e.contextBridge.exposeInMainWorld(`electron`,{platform:process.platform}),e.contextBridge.exposeInMainWorld(`electronAPI`,{openFiles:t=>e.ipcRenderer.invoke(`dialog:openFiles`,t),readFile:t=>e.ipcRenderer.invoke(`file:read`,t),getPort:()=>e.ipcRenderer.invoke(`get-port`),titlebar:{minimize:()=>e.ipcRenderer.invoke(`titlebar:minimize`),maximize:()=>e.ipcRenderer.invoke(`titlebar:maximize`),close:()=>e.ipcRenderer.invoke(`titlebar:close`)}});
+let electron = require("electron");
+//#region electron/preload.ts
+electron.contextBridge.exposeInMainWorld("electron", { platform: process.platform });
+electron.contextBridge.exposeInMainWorld("electronAPI", {
+	openFiles: (options) => electron.ipcRenderer.invoke("dialog:openFiles", options),
+	readFile: (filePath) => electron.ipcRenderer.invoke("file:read", filePath),
+	getPort: () => electron.ipcRenderer.invoke("get-port"),
+	titlebar: {
+		minimize: () => electron.ipcRenderer.invoke("titlebar:minimize"),
+		maximize: () => electron.ipcRenderer.invoke("titlebar:maximize"),
+		close: () => electron.ipcRenderer.invoke("titlebar:close")
+	}
+});
+//#endregion

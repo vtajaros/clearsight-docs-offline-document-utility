@@ -1,109 +1,147 @@
-import { BrowserWindow as e, Menu as t, app as n, dialog as r, ipcMain as i } from "electron";
-import { spawn as a } from "child_process";
-import * as o from "path";
-import * as s from "net";
-import { fileURLToPath as c } from "url";
-import * as l from "fs";
+import { BrowserWindow, Menu, app, dialog, ipcMain } from "electron";
+import { spawn } from "child_process";
+import * as path from "path";
+import * as net from "net";
+import { fileURLToPath } from "url";
+import * as fs from "fs";
 //#region electron/main.ts
-var u = c(import.meta.url), d = o.dirname(u), f = null, p = null;
-function m() {
-	return new Promise((e, t) => {
-		let n = s.createServer();
-		n.listen(0, "127.0.0.1", () => {
-			let r = n.address(), i = typeof r == "object" && r ? r.port : null;
-			n.close(() => {
-				i ? e(i) : t(/* @__PURE__ */ Error("Could not find free port"));
+var __filename = fileURLToPath(import.meta.url);
+var __dirname = path.dirname(__filename);
+var backendProcess = null;
+var mainWindow = null;
+function findFreePort() {
+	return new Promise((resolve, reject) => {
+		const server = net.createServer();
+		server.listen(0, "127.0.0.1", () => {
+			const address = server.address();
+			const port = typeof address === "object" && address ? address.port : null;
+			server.close(() => {
+				if (port) resolve(port);
+				else reject(/* @__PURE__ */ new Error("Could not find free port"));
 			});
 		});
 	});
 }
-async function h(e) {
-	let t = !!process.env.VITE_DEV_SERVER_URL, r = o.join(n.getAppPath(), "..", "backend");
-	f = a(t ? o.join(r, ".venv", "Scripts", "uvicorn.exe") : o.join(process.resourcesPath, "backend", "backend.exe"), t ? [
+async function startBackend(port) {
+	const isDev = !!process.env.VITE_DEV_SERVER_URL;
+	const backendBase = path.join(app.getAppPath(), "..", "backend");
+	backendProcess = spawn(isDev ? path.join(backendBase, ".venv", "Scripts", "uvicorn.exe") : path.join(process.resourcesPath, "backend", "backend.exe"), isDev ? [
 		"api:app",
 		"--port",
-		String(e),
+		String(port),
 		"--host",
 		"127.0.0.1"
 	] : [
 		"--port",
-		String(e),
+		String(port),
 		"--host",
 		"127.0.0.1"
 	], {
-		cwd: t ? r : void 0,
+		cwd: isDev ? backendBase : void 0,
 		stdio: "pipe",
-		detached: !1
-	}), f.stdout?.on("data", (e) => console.log("[backend]", e.toString())), f.stderr?.on("data", (e) => console.error("[backend]", e.toString())), await g(e);
+		detached: false
+	});
+	backendProcess.stdout?.on("data", (d) => console.log("[backend]", d.toString()));
+	backendProcess.stderr?.on("data", (d) => console.error("[backend]", d.toString()));
+	await waitForBackend(port);
 }
-function g(e, t = 40, n = 500) {
-	return new Promise((r, i) => {
-		let a = 0, o = () => {
-			let c = s.createConnection({
-				port: e,
+function waitForBackend(port, retries = 40, intervalMs = 500) {
+	return new Promise((resolve, reject) => {
+		let attempts = 0;
+		const check = () => {
+			const sock = net.createConnection({
+				port,
 				host: "127.0.0.1"
 			});
-			c.on("connect", () => {
-				c.destroy(), r();
-			}), c.on("error", () => {
-				++a >= t ? i(/* @__PURE__ */ Error("Backend did not start in time")) : setTimeout(o, n);
+			sock.on("connect", () => {
+				sock.destroy();
+				resolve();
+			});
+			sock.on("error", () => {
+				if (++attempts >= retries) reject(/* @__PURE__ */ new Error("Backend did not start in time"));
+				else setTimeout(check, intervalMs);
 			});
 		};
-		o();
+		check();
 	});
 }
-function _() {
-	f &&= (f.kill(), null);
+function killBackend() {
+	if (backendProcess) {
+		backendProcess.kill();
+		backendProcess = null;
+	}
 }
-var v = void 0;
-function y(e) {
-	let t = o.extname(e).toLowerCase();
-	return t === ".pdf" ? "application/pdf" : t === ".jpg" || t === ".jpeg" ? "image/jpeg" : t === ".png" ? "image/png" : t === ".webp" ? "image/webp" : "application/octet-stream";
+var lastUsedDirectory = void 0;
+function getMimeType(filePath) {
+	const ext = path.extname(filePath).toLowerCase();
+	if (ext === ".pdf") return "application/pdf";
+	if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+	if (ext === ".png") return "image/png";
+	if (ext === ".webp") return "image/webp";
+	return "application/octet-stream";
 }
-i.handle("dialog:openFiles", async (e, t) => {
-	let { canceled: n, filePaths: i } = await r.showOpenDialog({
-		defaultPath: v,
-		properties: t.multiSelections ? ["openFile", "multiSelections"] : ["openFile"],
-		filters: t.filters ?? [{
+ipcMain.handle("dialog:openFiles", async (_event, options) => {
+	const { canceled, filePaths } = await dialog.showOpenDialog({
+		defaultPath: lastUsedDirectory,
+		properties: options.multiSelections ? ["openFile", "multiSelections"] : ["openFile"],
+		filters: options.filters ?? [{
 			name: "All Files",
 			extensions: ["*"]
 		}]
 	});
-	return !n && i.length > 0 && (v = o.dirname(i[0])), n ? [] : i.map((e) => {
-		let t = l.statSync(e);
+	if (!canceled && filePaths.length > 0) lastUsedDirectory = path.dirname(filePaths[0]);
+	if (canceled) return [];
+	return filePaths.map((filePath) => {
+		const stats = fs.statSync(filePath);
 		return {
-			path: e,
-			name: o.basename(e),
-			size: t.size,
-			type: y(e),
-			isElectron: !0
+			path: filePath,
+			name: path.basename(filePath),
+			size: stats.size,
+			type: getMimeType(filePath),
+			isElectron: true
 		};
 	});
-}), i.handle("file:read", async (e, t) => {
-	let n = await l.promises.readFile(t);
-	return n.buffer.slice(n.byteOffset, n.byteOffset + n.byteLength);
-}), console.log("appPath:", n.getAppPath()), n.whenReady().then(async () => {
-	let r = await m();
-	await h(r), i.handle("get-port", () => r), t.setApplicationMenu(null), p = new e({
+});
+ipcMain.handle("file:read", async (_event, filePath) => {
+	const buffer = await fs.promises.readFile(filePath);
+	return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+});
+console.log("appPath:", app.getAppPath());
+app.whenReady().then(async () => {
+	const port = await findFreePort();
+	await startBackend(port);
+	ipcMain.handle("get-port", () => port);
+	Menu.setApplicationMenu(null);
+	mainWindow = new BrowserWindow({
 		width: 1200,
 		height: 800,
-		frame: !1,
+		frame: false,
 		titleBarStyle: "hidden",
-		icon: o.join(n.getAppPath(), "..", "icon.png"),
-		autoHideMenuBar: !0,
-		menuBarVisible: !1,
-		thickFrame: !1,
+		icon: path.join(app.getAppPath(), "..", "icon.png"),
+		autoHideMenuBar: true,
+		thickFrame: false,
 		webPreferences: {
-			preload: o.join(d, "preload.mjs"),
-			contextIsolation: !0,
-			nodeIntegration: !1
+			preload: path.join(__dirname, "preload.mjs"),
+			contextIsolation: true,
+			nodeIntegration: false
 		}
-	}), p.maximize(), i.handle("titlebar:minimize", () => p?.minimize()), i.handle("titlebar:maximize", () => {
-		p?.isMaximized() ? p.restore() : p?.maximize();
-	}), i.handle("titlebar:close", () => p?.close()), p.webContents.on("did-finish-load", () => {
-		p?.webContents.executeJavaScript(`window.__BACKEND_PORT__ = ${r}`);
-	}), process.env.VITE_DEV_SERVER_URL ? p.loadURL(process.env.VITE_DEV_SERVER_URL) : p.loadFile("dist/index.html");
-}), n.on("window-all-closed", () => {
-	_(), process.platform !== "darwin" && n.quit();
-}), n.on("before-quit", _);
+	});
+	mainWindow.maximize();
+	ipcMain.handle("titlebar:minimize", () => mainWindow?.minimize());
+	ipcMain.handle("titlebar:maximize", () => {
+		if (mainWindow?.isMaximized()) mainWindow.restore();
+		else mainWindow?.maximize();
+	});
+	ipcMain.handle("titlebar:close", () => mainWindow?.close());
+	mainWindow.webContents.on("did-finish-load", () => {
+		mainWindow?.webContents.executeJavaScript(`window.__BACKEND_PORT__ = ${port}`);
+	});
+	if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+	else mainWindow.loadFile("dist/index.html");
+});
+app.on("window-all-closed", () => {
+	killBackend();
+	if (process.platform !== "darwin") app.quit();
+});
+app.on("before-quit", killBackend);
 //#endregion
