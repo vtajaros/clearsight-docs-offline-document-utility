@@ -1,16 +1,31 @@
 """
 PDF compression service.
 Handles compressing PDF files while maintaining quality.
+
+Compression levels:
+  low    — stream-only compression via pypdf (fast, minimal size reduction)
+  medium — stream compression + image recompression at 75% JPEG quality
+  high   — stream compression + aggressive image recompression at 45% JPEG quality
 """
 from pathlib import Path
 from pypdf import PdfWriter, PdfReader
 from typing import Callable, Optional
 import os
+import io
+import tempfile
+import shutil
 
 
 class PdfCompressService:
     """Service for compressing PDF files."""
-    
+
+    # JPEG quality per compression level for image recompression
+    IMAGE_QUALITY = {
+        "low": None,   # No image recompression
+        "medium": 75,
+        "high": 45,
+    }
+
     def compress_pdf(
         self,
         pdf_path: str,
@@ -20,191 +35,130 @@ class PdfCompressService:
     ) -> dict:
         """
         Compress a PDF file.
-        
+
         Args:
             pdf_path: Path to the source PDF file
             output_path: Path where the compressed PDF should be saved
-            compression_level: Compression level - "low", "medium", or "high"
-            progress_callback: Optional callback for progress updates (current_page, total_pages)
-            
+            compression_level: "low", "medium", or "high"
+            progress_callback: Optional callback(current_page, total_pages)
+
         Returns:
-            Dictionary with compression results including original and new sizes
+            Dict with original_size, new_size, reduction_percentage, success.
         """
         try:
-            # Get original file size
             original_size = os.path.getsize(pdf_path)
-            
-            pdf_reader = PdfReader(pdf_path)
-            pdf_writer = PdfWriter()
-            
-            total_pages = len(pdf_reader.pages)
-            
-            # Add all pages
-            for i, page in enumerate(pdf_reader.pages):
-                pdf_writer.add_page(page)
-                if progress_callback:
-                    progress_callback(i + 1, total_pages)
-            
-            # Apply compression based on level
-            if compression_level == "low":
-                # Light compression - mainly remove duplicates
-                pdf_writer.add_metadata(pdf_reader.metadata or {})
-                
-            elif compression_level == "medium":
-                # Medium compression - compress streams and remove duplicates
-                for page in pdf_writer.pages:
-                    page.compress_content_streams()
-                    
-            elif compression_level == "high":
-                # High compression - aggressive compression
-                for page in pdf_writer.pages:
-                    page.compress_content_streams()
-                # Remove unused objects will happen during write
-            
-            # Write with compression
-            with open(output_path, 'wb') as output_file:
-                pdf_writer.write(output_file)
-            
-            # Get new file size
+            image_quality = self.IMAGE_QUALITY.get(compression_level)
+
+            if image_quality is not None:
+                # Medium / high: recompress images via PyMuPDF then stream-compress
+                work_path = self._recompress_images(pdf_path, image_quality, progress_callback)
+                try:
+                    self._stream_compress(work_path, output_path)
+                finally:
+                    try:
+                        os.unlink(work_path)
+                    except Exception:
+                        pass
+            else:
+                # Low: stream compression only
+                self._stream_compress(pdf_path, output_path, progress_callback)
+
             new_size = os.path.getsize(output_path)
-            
-            # Calculate savings
             size_reduction = original_size - new_size
-            reduction_percentage = (size_reduction / original_size * 100) if original_size > 0 else 0
-            
+            reduction_pct = (size_reduction / original_size * 100) if original_size > 0 else 0.0
+
             return {
                 "success": True,
                 "original_size": original_size,
                 "new_size": new_size,
                 "size_reduction": size_reduction,
-                "reduction_percentage": reduction_percentage,
-                "total_pages": total_pages
+                "reduction_percentage": round(reduction_pct, 2),
             }
-            
+
         except Exception as e:
             print(f"Error compressing PDF: {e}")
             raise
-    
-    def compress_pdf_with_image_optimization(
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _stream_compress(
+        self,
+        src_path: str,
+        dst_path: str,
+        progress_callback: Optional[Callable[[int, int], None]] = None
+    ) -> None:
+        """Write a pypdf copy with content-stream compression."""
+        reader = PdfReader(src_path)
+        writer = PdfWriter()
+        total = len(reader.pages)
+        for i, page in enumerate(reader.pages):
+            added_page = writer.add_page(page)
+            added_page.compress_content_streams()
+            if progress_callback:
+                progress_callback(i + 1, total)
+        with open(dst_path, "wb") as f:
+            writer.write(f)
+
+    def _recompress_images(
         self,
         pdf_path: str,
-        output_path: str,
-        image_quality: int = 85,
+        jpeg_quality: int,
         progress_callback: Optional[Callable[[int, int], None]] = None
-    ) -> dict:
+    ) -> str:
         """
-        Compress a PDF file with image optimization.
-        Uses Pillow to recompress images within the PDF.
-        
-        Args:
-            pdf_path: Path to the source PDF file
-            output_path: Path where the compressed PDF should be saved
-            image_quality: JPEG quality for images (1-100, higher = better quality)
-            progress_callback: Optional callback for progress updates
-            
-        Returns:
-            Dictionary with compression results
+        Use PyMuPDF to recompress all raster images in the PDF at the given
+        JPEG quality. Returns the path to a temporary file — caller must delete it.
         """
-        try:
-            from PIL import Image
-            import io
-            
-            # Get original file size
-            original_size = os.path.getsize(pdf_path)
-            
-            pdf_reader = PdfReader(pdf_path)
-            pdf_writer = PdfWriter()
-            
-            total_pages = len(pdf_reader.pages)
-            
-            for i, page in enumerate(pdf_reader.pages):
-                pdf_writer.add_page(page)
-                
-                # Try to compress images on this page
-                if '/Resources' in page and '/XObject' in page['/Resources']:
-                    x_objects = page['/Resources']['/XObject'].get_object()
-                    
-                    for obj_name in x_objects:
-                        obj = x_objects[obj_name]
-                        if obj.get('/Subtype') == '/Image':
-                            # This is an image - try to optimize it
-                            try:
-                                self._optimize_image_object(obj, image_quality)
-                            except Exception:
-                                # If image optimization fails, continue without it
-                                pass
-                
-                if progress_callback:
-                    progress_callback(i + 1, total_pages)
-            
-            # Compress content streams
-            for page in pdf_writer.pages:
-                page.compress_content_streams()
-            
-            # Write compressed PDF
-            with open(output_path, 'wb') as output_file:
-                pdf_writer.write(output_file)
-            
-            # Get new file size
-            new_size = os.path.getsize(output_path)
-            
-            # Calculate savings
-            size_reduction = original_size - new_size
-            reduction_percentage = (size_reduction / original_size * 100) if original_size > 0 else 0
-            
-            return {
-                "success": True,
-                "original_size": original_size,
-                "new_size": new_size,
-                "size_reduction": size_reduction,
-                "reduction_percentage": reduction_percentage,
-                "total_pages": total_pages
-            }
-            
-        except ImportError:
-            # Pillow not available, fall back to basic compression
-            return self.compress_pdf(pdf_path, output_path, "high", progress_callback)
-        except Exception as e:
-            print(f"Error compressing PDF with image optimization: {e}")
-            raise
-    
-    def _optimize_image_object(self, image_obj, quality: int):
-        """Attempt to optimize an image object within the PDF."""
-        # This is a placeholder for more advanced image optimization
-        # Full implementation would require extracting, recompressing, and reinserting images
-        pass
-    
+        import fitz
+        from PIL import Image
+
+        doc = fitz.open(pdf_path)
+        total = len(doc)
+
+        for page_index in range(total):
+            page = doc[page_index]
+            if progress_callback:
+                progress_callback(page_index + 1, total)
+
+            for img in page.get_images(full=True):
+                xref = img[0]
+                try:
+                    base = doc.extract_image(xref)
+                    raw = base["image"]
+                    ext = base["ext"].lower()
+
+                    # Only recompress raster images (skip jbig2, ccitt, etc.)
+                    if ext not in ("jpeg", "jpg", "png", "bmp", "tiff", "tif"):
+                        continue
+
+                    pil_img = Image.open(io.BytesIO(raw)).convert("RGB")
+                    buf = io.BytesIO()
+                    pil_img.save(buf, format="JPEG", quality=jpeg_quality, optimize=True)
+                    buf.seek(0)
+
+                    doc.update_image(xref, stream=buf.read())
+                except Exception:
+                    # Skip images that can't be recompressed (e.g. masks, forms)
+                    continue
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, prefix="cs_compress_")
+        tmp.close()
+        doc.save(tmp.name, garbage=4, deflate=True, clean=True)
+        doc.close()
+        return tmp.name
+
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
+
     def get_pdf_info(self, pdf_path: str) -> dict:
-        """
-        Get information about a PDF file.
-        
-        Args:
-            pdf_path: Path to the PDF file
-            
-        Returns:
-            Dictionary with PDF information
-        """
         try:
-            file_size = os.path.getsize(pdf_path)
-            pdf_reader = PdfReader(pdf_path)
-            
             return {
-                "file_size": file_size,
-                "page_count": len(pdf_reader.pages),
-                "metadata": pdf_reader.metadata
+                "file_size": os.path.getsize(pdf_path),
+                "page_count": len(PdfReader(pdf_path).pages),
             }
         except Exception as e:
             print(f"Error reading PDF info: {e}")
             raise
-    
-    @staticmethod
-    def format_file_size(size_bytes: int) -> str:
-        """Format file size in human-readable format."""
-        if size_bytes < 1024:
-            return f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            return f"{size_bytes / 1024:.1f} KB"
-        elif size_bytes < 1024 * 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024):.2f} MB"
-        else:
-            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"

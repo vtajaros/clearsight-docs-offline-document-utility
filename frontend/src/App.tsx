@@ -12,17 +12,17 @@ import { DeletePagesPanel } from './components/panels/DeletePagesPanel'
 import { NavigationConfirmModal } from './components/NavigationConfirmModal'
 import { useNavigationGuard } from './hooks/useNavigationGuard'
 import type {
-  ActiveTab, OcrLanguage, OcrFormat, OcrAccuracy, CompletionModal
+  ActiveTab, OcrLanguage, OcrFormat, OcrAccuracy, CompletionModal, ElectronFile
 } from './types'
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('merge')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('image-to-pdf')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
 
   // OCR state (managed in App.tsx to support background websocket thread lifecycle)
-  const [ocrFile, setOcrFile] = useState<any | null>(null)
+  const [ocrFile, setOcrFile] = useState<ElectronFile | File | null>(null)
   const [ocrLanguage, setOcrLanguage] = useState<OcrLanguage>('eng')
   const [ocrFormat, setOcrFormat] = useState<OcrFormat>('txt')
   const [ocrAccuracy, setOcrAccuracy] = useState<OcrAccuracy>('balanced')

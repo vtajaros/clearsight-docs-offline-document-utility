@@ -76,6 +76,23 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
     setHasUnsavedChanges?.(false)
   }
 
+  const handleSort = (type: string) => {
+    if (!type) return
+    setMergeFiles((prev) => {
+      const sorted = [...prev].sort((a, b) => {
+        if (type === 'name-asc') return a.name.localeCompare(b.name)
+        if (type === 'name-desc') return b.name.localeCompare(a.name)
+        const dateA = a.lastModified || a.createdAt || (a instanceof File ? a.lastModified : 0)
+        const dateB = b.lastModified || b.createdAt || (b instanceof File ? b.lastModified : 0)
+        if (type === 'date-newest') return dateB - dateA
+        if (type === 'date-oldest') return dateA - dateB
+        return 0
+      })
+      setHasUnsavedChanges?.(true)
+      return sorted
+    })
+  }
+
   const handleMergeDragOver = (e: DragEvent<HTMLDivElement>) => { e.preventDefault() }
   const handleMergeDragLeave = () => {}
   const handleMergeDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -114,7 +131,7 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
         onExport: () => {
           const a = document.createElement('a'); a.href = url; a.download = 'merged.pdf'; a.click()
           setModal({ open: false, title: '', subtitle: '', onExport: () => {} })
-          clearMergeFiles()
+          setHasUnsavedChanges?.(false)
         }
       })
     } catch (err: any) {
@@ -152,6 +169,16 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
               {mergeFiles.length} {mergeFiles.length === 1 ? 'Document' : 'Documents'}
             </div>
             <div className="flex items-center gap-3">
+              <select
+                onChange={(e) => { handleSort(e.target.value); e.target.value = '' }}
+                className="px-3.5 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-zinc-200 rounded-lg transition-all cursor-pointer border border-zinc-700/50 outline-none"
+              >
+                <option value="">Sort by...</option>
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="date-newest">Date (Newest)</option>
+                <option value="date-oldest">Date (Oldest)</option>
+              </select>
               <button onClick={addMoreFiles} className="px-3.5 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-zinc-200 rounded-lg transition-all cursor-pointer border border-zinc-700/50">Add More</button>
               <button onClick={clearMergeFiles} className="px-3.5 py-2 text-xs font-semibold bg-red-950/20 hover:bg-red-950/40 text-red-400 rounded-lg transition-all cursor-pointer border border-red-900/30">Clear All</button>
               <button

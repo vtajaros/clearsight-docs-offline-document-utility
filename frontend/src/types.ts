@@ -27,6 +27,8 @@ export type ElectronFile = {
   size: number
   type: string
   isElectron: true
+  lastModified?: number
+  createdAt?: number
 }
 
 declare global {
@@ -41,7 +43,7 @@ declare global {
       titlebar: {
         minimize(): Promise<void>
         maximize(): Promise<void>
-        close():    Promise<void>
+        close(): Promise<void>
       }
     };
   }
@@ -63,7 +65,7 @@ export async function pickFiles(options: {
   accept?: string;
   filters?: { name: string; extensions: string[] }[];
   multiple?: boolean;
-}): Promise<any[] | File[]> {
+}): Promise<(ElectronFile | File)[]> {
   if (window.electronAPI?.openFiles) {
     return window.electronAPI.openFiles({
       filters: options.filters,
@@ -81,6 +83,37 @@ export async function pickFiles(options: {
   });
 }
 
-// Module-level thumbnail caches shared across panels (stable across re-renders)
-export const thumbnailCache = new Map<string, string>()
-export const imageThumbnailCache = new Map<string, string>()
+export class LruCache<K, V> {
+  private readonly max: number
+  private readonly map: Map<K, V>
+
+  constructor(max: number) {
+    this.max = max
+    this.map = new Map()
+  }
+
+  has(key: K): boolean {
+    return this.map.has(key)
+  }
+
+  get(key: K): V | undefined {
+    if (!this.map.has(key)) return undefined
+    // Re-insert to mark as recently used
+    const value = this.map.get(key)!
+    this.map.delete(key)
+    this.map.set(key, value)
+    return value
+  }
+
+  set(key: K, value: V): void {
+    if (this.map.has(key)) this.map.delete(key)
+    this.map.set(key, value)
+    if (this.map.size > this.max) {
+      // Map iteration order is insertion order — first key is oldest
+      this.map.delete(this.map.keys().next().value!)
+    }
+  }
+}
+
+export const thumbnailCache = new LruCache<string, string>(50)
+export const imageThumbnailCache = new LruCache<string, string>(50)

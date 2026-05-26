@@ -49,7 +49,7 @@ export function CompressPanel({ base, loading, setLoading, setError, setModal, s
         open: true, title: 'Compression Complete', subtitle,
         onExport: () => {
           const a = document.createElement('a'); a.href = url; a.download = downloadName; a.click()
-          setModal({ open: false, title: '', subtitle: '', onExport: () => {} }); setCompressFile(null); setHasUnsavedChanges(false)
+          setModal({ open: false, title: '', subtitle: '', onExport: () => {} }); setHasUnsavedChanges(false)
         }
       })
     } catch (err: any) {
@@ -93,22 +93,29 @@ export function CompressPanel({ base, loading, setLoading, setError, setModal, s
       )}
       
       <div className="shrink-0 w-full max-w-4xl mx-auto space-y-6">
-        <div className="space-y-2">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Compression Level</label>
-        <div className="flex bg-zinc-950/50 p-1 border border-zinc-800 rounded-lg">
-          {(['low', 'medium', 'high'] as const).map((lvl) => (
-            <button
-              key={lvl}
-              onClick={() => setCompressLevel(lvl)}
-              className={`flex-1 py-1.5 text-xs font-medium rounded-md capitalize transition-all ${
-                compressLevel === lvl ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-400'
-              }`}
-            >
-              {lvl}
-            </button>
-          ))}
+        <div className="space-y-3">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Compression Level</label>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { lvl: 'low',    label: 'Low',    desc: 'Stream-only. Fast, minimal size reduction. Safe for all PDFs.' },
+              { lvl: 'medium', label: 'Medium', desc: 'Recompresses images at 75% quality. Good balance of size and fidelity.' },
+              { lvl: 'high',   label: 'High',   desc: 'Recompresses images at 45% quality. Maximum reduction, some visual loss.' },
+            ] as const).map(({ lvl, label, desc }) => (
+              <button
+                key={lvl}
+                onClick={() => setCompressLevel(lvl)}
+                className={`flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-all ${
+                  compressLevel === lvl
+                    ? 'border-violet-500 bg-violet-500/10 text-violet-400'
+                    : 'border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
+                }`}
+              >
+                <span className="text-xs font-semibold capitalize">{label}</span>
+                <span className="text-[11px] leading-snug text-zinc-500">{desc}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
         <button
           disabled={!compressFile || loading}

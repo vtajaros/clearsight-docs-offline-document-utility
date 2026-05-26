@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ElectronFile } from '../src/types'
 
 contextBridge.exposeInMainWorld('electron', {
     platform: process.platform,
@@ -8,7 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openFiles: (options: {
         filters?: { name: string; extensions: string[] }[];
         multiSelections?: boolean;
-    }): Promise<any[]> =>
+    }): Promise<ElectronFile[]> =>
         ipcRenderer.invoke('dialog:openFiles', options),
 
     readFile: (filePath: string): Promise<ArrayBuffer> =>

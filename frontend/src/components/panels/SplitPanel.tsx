@@ -62,7 +62,7 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
         onExport: () => {
           const a = document.createElement('a'); a.href = url; a.download = downloadName; a.click()
           setModal({ open: false, title: '', subtitle: '', onExport: () => {} })
-          setSplitFile(null); resetSplitOutputs(); setHasUnsavedChanges?.(false)
+          resetSplitOutputs(); setHasUnsavedChanges?.(false)
         }
       })
     } catch (err: any) {

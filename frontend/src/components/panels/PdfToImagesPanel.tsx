@@ -68,8 +68,6 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
           a.download = downloadName
           a.click()
           setModal({ open: false, title: '', subtitle: '', onExport: () => {} })
-          thumbnailCache.delete('pdf-to-images-preview')
-          setPdfToImagesFile(null)
           setHasUnsavedChanges?.(false)
         }
       })

@@ -38,7 +38,7 @@ class PdfMergeService:
             
         except Exception as e:
             print(f"Error merging PDFs: {e}")
-            return False
+            raise
     
     def get_pdf_info(self, pdf_path: str) -> dict:
         """

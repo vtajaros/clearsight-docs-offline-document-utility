@@ -117,7 +117,7 @@ class ImageToPdfService:
             if Path(output_path).stat().st_size == 0:
                 raise ValueError("Output PDF file is empty")
             
-            print("✓ PDF created successfully!")
+            print("PDF created successfully!")
             return True
             
         except Exception as e:

@@ -68,12 +68,21 @@ function waitForBackend(port: number, retries = 40, intervalMs = 500): Promise<v
 
 function killBackend() {
     if (backendProcess) {
-        backendProcess.kill()
+        const pid = backendProcess.pid
+        if (pid) {
+            if (process.platform === 'win32') {
+                // Kill the entire process tree (catches Tesseract/Poppler grandchildren)
+                spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' })
+            } else {
+                backendProcess.kill('SIGTERM')
+            }
+        }
         backendProcess = null
     }
 }
 
 let lastUsedDirectory: string | undefined = undefined
+const allowedReadPaths = new Set<string>()
 
 function getMimeType(filePath: string): string {
     const ext = path.extname(filePath).toLowerCase()
@@ -97,29 +106,40 @@ ipcMain.handle(
 
         if (!canceled && filePaths.length > 0) {
             lastUsedDirectory = path.dirname(filePaths[0])
+            filePaths.forEach(p => allowedReadPaths.add(p))
         }
 
         if (canceled) return []
 
-        return filePaths.map(filePath => {
-            const stats = fs.statSync(filePath)
-            return {
+        return filePaths.flatMap(filePath => {
+            let stats: fs.Stats
+            try {
+                stats = fs.statSync(filePath)
+            } catch {
+                // File disappeared between dialog close and stat — skip it
+                return []
+            }
+            return [{
                 path: filePath,
                 name: path.basename(filePath),
                 size: stats.size,
                 type: getMimeType(filePath),
-                isElectron: true,
-            }
+                isElectron: true as const,
+                lastModified: stats.mtimeMs,
+                createdAt: stats.birthtimeMs,
+            }]
         })
     }
 )
 
 ipcMain.handle('file:read', async (_event, filePath: string) => {
+    if (!allowedReadPaths.has(filePath)) {
+        throw new Error(`Access denied: ${filePath} was not selected by the user.`)
+    }
     const buffer = await fs.promises.readFile(filePath)
     return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
 })
 
-console.log('appPath:', app.getAppPath())
 app.whenReady().then(async () => {
     const port = await findFreePort()
     await startBackend(port)
@@ -150,12 +170,6 @@ app.whenReady().then(async () => {
     })
     ipcMain.handle('titlebar:close', () => mainWindow?.close())
 
-    // Inject backend port into renderer
-    mainWindow.webContents.on('did-finish-load', () => {
-        mainWindow?.webContents.executeJavaScript(
-            `window.__BACKEND_PORT__ = ${port}`
-        )
-    })
 
     if (process.env.VITE_DEV_SERVER_URL) {
         mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)

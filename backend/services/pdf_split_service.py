@@ -49,7 +49,7 @@ class PdfSplitService:
             
         except Exception as e:
             print(f"Error splitting PDF by range: {e}")
-            return False
+            raise
     
     def split_into_pages(self, pdf_path: str, output_dir: str) -> bool:
         """
@@ -90,7 +90,7 @@ class PdfSplitService:
             
         except Exception as e:
             print(f"Error splitting PDF into pages: {e}")
-            return False
+            raise
     
     def get_page_count(self, pdf_path: str) -> int:
         """

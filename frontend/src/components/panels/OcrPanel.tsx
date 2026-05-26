@@ -119,7 +119,7 @@ export function OcrPanel({
           onExport: () => {
             downloadTextFile(text)
             setModal({ open: false, title: '', subtitle: '', onExport: () => {} })
-            setOcrFile(null); resetOcrOutputs(); setHasUnsavedChanges?.(false)
+            setHasUnsavedChanges?.(false)
             setJobId(null)
           }
         })
@@ -135,7 +135,7 @@ export function OcrPanel({
             const a = document.createElement('a')
             a.href = url; a.download = `${baseName}_ocr.pdf`; a.click()
             setModal({ open: false, title: '', subtitle: '', onExport: () => {} })
-            setOcrFile(null); resetOcrOutputs(); setHasUnsavedChanges?.(false)
+            setHasUnsavedChanges?.(false)
             setJobId(null)
           }
         })

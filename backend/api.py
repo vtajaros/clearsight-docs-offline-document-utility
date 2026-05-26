@@ -2,17 +2,24 @@
 ClearSight Docs — Local API Server
 Wraps backend services in a FastAPI application.
 Run with: uvicorn api:app --reload --port 8000
+
+Request lifecycle:
+  HTTP request
+    → resolve_single_input / resolve_multiple_inputs  (validate, save to tmp dir)
+    → service call  (raises on failure)
+    → CleanupFileResponse  (streams file, deletes tmp dir in __call__ finally)
 """
 import os
 import shutil
 import tempfile
 import json
+import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, WebSocket, WebSocketDisconnect, Depends
 import asyncio
-import uuid
 from concurrent.futures import ThreadPoolExecutor
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -33,7 +40,7 @@ app = FastAPI(title="ClearSight Docs API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -48,10 +55,12 @@ _delete_pages  = PdfDeleteService()
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
+
 class CleanupFileResponse(FileResponse):
     """
-    Custom FileResponse that cleans up a temporary directory
-    after the response has been fully streamed to the client.
+    FileResponse that deletes a temporary directory after streaming.
+    The cleanup runs in the finally block of __call__ regardless of
+    whether the client disconnects cleanly.
     """
     def __init__(self, *args, temp_dir: Path, **kwargs):
         super().__init__(*args, **kwargs)
@@ -62,6 +71,7 @@ class CleanupFileResponse(FileResponse):
             await super().__call__(scope, receive, send)
         finally:
             _cleanup_dir(self.temp_dir)
+
 
 class ConnectionManager:
     def __init__(self):
@@ -75,17 +85,9 @@ class ConnectionManager:
         self.active.pop(job_id, None)
 
     def is_connected(self, job_id: str) -> bool:
-        """Return True only if a live socket is registered for this job."""
         return job_id in self.active
 
     async def send(self, job_id: str, data: dict) -> bool:
-        """
-        Send a JSON message to the registered socket.
-
-        Returns True on success, False if the socket is gone.
-        Disconnects silently on any send error so callers don't
-        need to handle exceptions.
-        """
         ws = self.active.get(job_id)
         if ws is None:
             return False
@@ -93,9 +95,9 @@ class ConnectionManager:
             await ws.send_json(data)
             return True
         except Exception:
-            # Socket is broken — clean up so we stop trying
             self.disconnect(job_id)
             return False
+
 
 _ws_manager = ConnectionManager()
 
@@ -115,12 +117,47 @@ def _temp_dir() -> Path:
 
 
 def _cleanup_dir(path: Path) -> None:
-    """Clean up temporary directory."""
+    """Remove a temporary directory, ignoring errors."""
     try:
         if path.exists():
             shutil.rmtree(path)
     except Exception as e:
         print(f"Failed to clean up temp directory {path}: {e}")
+
+
+@contextmanager
+def _managed_tmp(tmp: Path):
+    """
+    Context manager that cleans up a temp directory on any exception,
+    re-raising HTTPExceptions as-is and wrapping all others as HTTP 500.
+    Usage:
+        with _managed_tmp(tmp):
+            ... service calls ...
+    """
+    try:
+        yield
+    except Exception as e:
+        _cleanup_dir(tmp)
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _validate_local_path(raw: str) -> Path:
+    """
+    Reject directory traversal attempts and resolve the path strictly.
+    Returns the resolved Path on success, raises HTTPException on failure.
+    """
+    path_obj = Path(raw)
+    if ".." in path_obj.parts or ".." in raw or "/../" in raw or "\\..\\" in raw:
+        raise HTTPException(status_code=400, detail="Directory traversal not allowed.")
+    try:
+        resolved = path_obj.resolve(strict=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"Local file not found: {raw}")
+    if not resolved.is_file():
+        raise HTTPException(status_code=400, detail=f"Local file not found: {raw}")
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -137,20 +174,7 @@ async def resolve_single_input(
     tmp = _temp_dir()
     try:
         if file_path:
-            path_obj = Path(file_path)
-            # Prevent directory traversal
-            if ".." in path_obj.parts or ".." in file_path or "/../" in file_path or "\\..\\" in file_path:
-                raise HTTPException(status_code=400, detail="Directory traversal not allowed.")
-            
-            try:
-                resolved_path = path_obj.resolve(strict=True)
-            except Exception:
-                raise HTTPException(status_code=400, detail=f"Local file not found: {file_path}")
-            
-            if not resolved_path.is_file():
-                raise HTTPException(status_code=400, detail=f"Local file not found: {file_path}")
-            
-            yield resolved_path, tmp
+            yield _validate_local_path(file_path), tmp
         else:
             if not file.filename:
                 raise HTTPException(status_code=400, detail="Empty filename uploaded.")
@@ -195,19 +219,7 @@ async def resolve_multiple_inputs(
         input_paths = []
         if resolved_files_path:
             for p in resolved_files_path:
-                path_obj = Path(p)
-                if ".." in path_obj.parts or ".." in p or "/../" in p or "\\..\\" in p:
-                    raise HTTPException(status_code=400, detail="Directory traversal not allowed.")
-                
-                try:
-                    resolved_path = path_obj.resolve(strict=True)
-                except Exception:
-                    raise HTTPException(status_code=400, detail=f"Local file not found: {p}")
-                
-                if not resolved_path.is_file():
-                    raise HTTPException(status_code=400, detail=f"Local file not found: {p}")
-                
-                input_paths.append(resolved_path)
+                input_paths.append(_validate_local_path(p))
         else:
             for i, upload in enumerate(files):
                 if not upload.filename:
@@ -216,7 +228,7 @@ async def resolve_multiple_inputs(
                 dest = tmp / f"input_{i:03d}{ext}"
                 _save_upload(upload, dest)
                 input_paths.append(dest)
-        
+
         yield input_paths, tmp
     except Exception:
         _cleanup_dir(tmp)
@@ -240,25 +252,22 @@ def health():
 async def ocr_websocket(websocket: WebSocket, job_id: str):
     await _ws_manager.connect(job_id, websocket)
     try:
-        # Keep the socket alive.  When the client disconnects
-        # (navigation, tab close, panel reset) WebSocketDisconnect
-        # is raised here, which causes the finally block to run.
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        pass  # Expected — client left
+        pass
     except Exception:
-        pass  # Any other transport error
+        pass
     finally:
-        # Always clean up so sync_callback stops broadcasting
         _ws_manager.disconnect(job_id)
+
 
 @app.post("/api/ocr")
 async def ocr_pdf(
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
     language: Annotated[str,  Form()] = "eng",
-    output_format: Annotated[str,  Form()] = "txt",   # "txt" | "pdf"
-    accuracy_mode: Annotated[str,  Form()] = "balanced",  # "fast" | "balanced" | "accurate"
+    output_format: Annotated[str,  Form()] = "txt",
+    accuracy_mode: Annotated[str,  Form()] = "balanced",
     dpi:           Annotated[int,  Form()] = 300,
     force_ocr:     Annotated[bool, Form()] = False,
     include_page_separators: Annotated[bool, Form()] = False,
@@ -269,7 +278,7 @@ async def ocr_pdf(
         raise HTTPException(status_code=400, detail="File must be a PDF.")
     stem = input_path.stem
 
-    try:
+    with _managed_tmp(tmp):
         output_ext  = "txt" if output_format == "txt" else "pdf"
         output_path = tmp / f"output.{output_ext}"
 
@@ -282,7 +291,7 @@ async def ocr_pdf(
             include_page_separators=include_page_separators,
         )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         async def broadcast(current: int, total: int, message: str):
             await _ws_manager.send(job_id, {
@@ -294,20 +303,14 @@ async def ocr_pdf(
         def sync_callback(current: int, total: int, message: str):
             if not job_id:
                 return
-            # Skip immediately if the socket is already gone —
-            # avoids scheduling a coroutine that will fail and
-            # avoids the 2-second timeout penalty per page.
             if not _ws_manager.is_connected(job_id):
                 return
             try:
                 future = asyncio.run_coroutine_threadsafe(
                     broadcast(current, total, message), loop
                 )
-                # Short timeout: if the event loop is busy or the
-                # socket broke just now, don't block the OCR thread.
                 future.result(timeout=1)
             except Exception:
-                # Socket gone or loop overloaded — just keep going.
                 pass
 
         result = await loop.run_in_executor(
@@ -317,7 +320,7 @@ async def ocr_pdf(
 
         if job_id:
             await _ws_manager.send(job_id, {"current": -1, "total": -1, "message": "done"})
-            _ws_manager.disconnect(job_id)   # ← free the slot
+            _ws_manager.disconnect(job_id)
 
         if not result.success:
             raise HTTPException(status_code=500, detail=result.error_message)
@@ -329,12 +332,6 @@ async def ocr_pdf(
             filename=f"{stem}_ocr.{output_ext}",
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -349,18 +346,14 @@ async def merge_pdfs(
 
     for path_obj in input_paths:
         if not path_obj.name.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail=f"'{path_obj}' is not a PDF.")
+            raise HTTPException(status_code=400, detail=f"'{path_obj.name}' is not a PDF.")
 
     if len(input_paths) < 2:
         raise HTTPException(status_code=400, detail="At least two PDF files are required.")
 
-    try:
-        input_str_paths = [str(p) for p in input_paths]
+    with _managed_tmp(tmp):
         output_path = str(tmp / "merged.pdf")
-        success = _merge.merge_pdfs(input_str_paths, output_path)
-
-        if not success:
-            raise HTTPException(status_code=500, detail="Merge failed.")
+        _merge.merge_pdfs([str(p) for p in input_paths], output_path)
 
         return CleanupFileResponse(
             path=output_path,
@@ -368,12 +361,6 @@ async def merge_pdfs(
             filename="merged.pdf",
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -394,14 +381,9 @@ async def split_by_range(
     if end_page < start_page:
         raise HTTPException(status_code=400, detail="end_page must be >= start_page.")
 
-    try:
+    with _managed_tmp(tmp):
         output_path = tmp / "split.pdf"
-        success = _split.split_by_range(
-            str(input_path), str(output_path), start_page, end_page
-        )
-
-        if not success:
-            raise HTTPException(status_code=500, detail="Split failed — check page range.")
+        _split.split_by_range(str(input_path), str(output_path), start_page, end_page)
 
         return CleanupFileResponse(
             path=str(output_path),
@@ -409,12 +391,6 @@ async def split_by_range(
             filename=f"{stem}_p{start_page}-{end_page}.pdf",
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -426,21 +402,15 @@ async def split_into_pages(
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
 ):
     """Split a PDF into individual single-page PDFs returned as a zip archive."""
-    import zipfile
-
     input_path, tmp = input_data
     if not input_path.name.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="File must be a PDF.")
     stem = input_path.stem
 
-    try:
-        pages_dir  = tmp / "pages"
-        success = _split.split_into_pages(str(input_path), str(pages_dir))
+    with _managed_tmp(tmp):
+        pages_dir = tmp / "pages"
+        _split.split_into_pages(str(input_path), str(pages_dir))
 
-        if not success:
-            raise HTTPException(status_code=500, detail="Split failed.")
-
-        # Zip up the individual pages
         zip_path = tmp / f"{stem}_pages.zip"
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for page_file in sorted(pages_dir.iterdir()):
@@ -452,12 +422,6 @@ async def split_into_pages(
             filename=f"{stem}_pages.zip",
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -477,12 +441,9 @@ async def compress_pdf_endpoint(
     if compression_level not in ["low", "medium", "high"]:
         raise HTTPException(status_code=400, detail="compression_level must be 'low', 'medium', or 'high'.")
 
-    try:
+    with _managed_tmp(tmp):
         output_path = tmp / "compressed.pdf"
         result = _compress.compress_pdf(str(input_path), str(output_path), compression_level)
-
-        if not result.get("success"):
-            raise HTTPException(status_code=500, detail="Compression failed.")
 
         stats = {
             "original_size": result["original_size"],
@@ -501,12 +462,6 @@ async def compress_pdf_endpoint(
             headers=headers,
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -527,14 +482,11 @@ async def pdf_to_images_endpoint(
     if image_format.upper() not in ["PNG", "JPG"]:
         raise HTTPException(status_code=400, detail="image_format must be 'PNG' or 'JPG'.")
 
-    try:
+    with _managed_tmp(tmp):
         output_zip_path = tmp / f"{stem}_images.zip"
-        success = _pdf_to_images.convert_pdf_to_images_zip(
+        _pdf_to_images.convert_pdf_to_images_zip(
             str(input_path), str(output_zip_path), image_format.upper(), dpi
         )
-
-        if not success:
-            raise HTTPException(status_code=500, detail="Conversion to images failed.")
 
         return CleanupFileResponse(
             path=str(output_zip_path),
@@ -542,12 +494,6 @@ async def pdf_to_images_endpoint(
             filename=f"{stem}_images.zip",
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -564,19 +510,14 @@ async def image_to_pdf_endpoint(
     input_paths, tmp = input_data
 
     for path_obj in input_paths:
-        ext = path_obj.suffix.lower()
-        if ext not in [".jpg", ".jpeg", ".png"]:
+        if path_obj.suffix.lower() not in [".jpg", ".jpeg", ".png"]:
             raise HTTPException(status_code=422, detail="Only JPG, JPEG, and PNG images are supported.")
 
-    try:
-        image_paths = [str(p) for p in input_paths]
+    with _managed_tmp(tmp):
         output_path = tmp / "output.pdf"
-        success = _image_to_pdf.convert_images_to_pdf(
-            image_paths, str(output_path), page_size, orientation, margin
+        _image_to_pdf.convert_images_to_pdf(
+            [str(p) for p in input_paths], str(output_path), page_size, orientation, margin
         )
-
-        if not success:
-            raise HTTPException(status_code=500, detail="Conversion to PDF failed.")
 
         return CleanupFileResponse(
             path=str(output_path),
@@ -584,12 +525,6 @@ async def image_to_pdf_endpoint(
             filename="images_combined.pdf",
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -613,12 +548,12 @@ async def delete_pdf_pages(
     except Exception:
         raise HTTPException(status_code=400, detail="pages_to_delete must be a JSON array of integers.")
 
-    try:
+    with _managed_tmp(tmp):
         output_path = tmp / "deleted.pdf"
-        success = _delete_pages.delete_pages(str(input_path), str(output_path), pages_list)
-
-        if not success:
-            raise HTTPException(status_code=500, detail="Delete pages failed.")
+        try:
+            _delete_pages.delete_pages(str(input_path), str(output_path), pages_list)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         return CleanupFileResponse(
             path=str(output_path),
@@ -626,9 +561,3 @@ async def delete_pdf_pages(
             filename=f"{stem}_deleted.pdf",
             temp_dir=tmp,
         )
-
-    except Exception as e:
-        _cleanup_dir(tmp)
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=str(e))

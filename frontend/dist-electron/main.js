@@ -98,7 +98,9 @@ ipcMain.handle("dialog:openFiles", async (_event, options) => {
 			name: path.basename(filePath),
 			size: stats.size,
 			type: getMimeType(filePath),
-			isElectron: true
+			isElectron: true,
+			lastModified: stats.mtimeMs,
+			createdAt: stats.birthtimeMs
 		};
 	});
 });

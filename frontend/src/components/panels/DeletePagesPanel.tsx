@@ -162,9 +162,9 @@ export function DeletePagesPanel({ base, loading, setLoading, setError, setModal
         setPagesToDelete(new Set())
         setPreviewPageIndex(null)
         
-        const arrayBuffer = selected.isElectron
+        const arrayBuffer = 'isElectron' in selected
           ? await window.electronAPI!.readFile(selected.path)
-          : await (selected as File).arrayBuffer()
+          : await selected.arrayBuffer()
 
         const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
         setPdfDoc(doc)
@@ -211,10 +211,10 @@ export function DeletePagesPanel({ base, loading, setLoading, setError, setModal
       const pagesToDeleteArray = Array.from(pagesToDelete).map(p => p - 1)
       formData.append('pages_to_delete', JSON.stringify(pagesToDeleteArray))
 
-      if ((file as any).isElectron) {
-        formData.append('file_path', (file as any).path)
+      if ('isElectron' in file) {
+        formData.append('file_path', file.path)
       } else {
-        formData.append('file', file as File)
+        formData.append('file', file)
       }
 
       const res = await fetch(`${base}/api/delete-pages`, {
@@ -237,12 +237,7 @@ export function DeletePagesPanel({ base, loading, setLoading, setError, setModal
         onExport: () => {
           const a = document.createElement('a')
           a.href = url
-          let originalName = 'document'
-          if ((file as any).isElectron) {
-            originalName = (file as any).name.replace(/\.[^/.]+$/, "")
-          } else {
-            originalName = (file as File).name.replace(/\.[^/.]+$/, "")
-          }
+          const originalName = file.name.replace(/\.[^/.]+$/, "")
           a.download = `${originalName}_deleted.pdf`
           document.body.appendChild(a)
           a.click()
@@ -286,8 +281,8 @@ export function DeletePagesPanel({ base, loading, setLoading, setError, setModal
                   </svg>
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-sm font-medium text-zinc-200 truncate max-w-[200px]" title={(file as any).name}>{(file as any).name}</p>
-                  <p className="text-xs text-zinc-500">{formatBytes((file as any).size)} • {pdfDoc?.numPages} pages</p>
+                  <p className="text-sm font-medium text-zinc-200 truncate max-w-[200px]" title={file.name}>{file.name}</p>
+                  <p className="text-xs text-zinc-500">{formatBytes(file.size)} • {pdfDoc?.numPages} pages</p>
                 </div>
               </div>
               

@@ -443,11 +443,7 @@ class OCRService:
         progress_callback: Optional[Callable[[int, int, str], None]] = None
     ) -> OCRResult:
         """Perform OCR and save result as plain text."""
-        temp_dir = None
         try:
-            # Create temporary directory for images
-            temp_dir = tempfile.mkdtemp()
-            
             if progress_callback:
                 progress_callback(0, 0, "Converting PDF to images...")
             
@@ -500,9 +496,7 @@ class OCRService:
                 error_message=f"OCR failed: {str(e)}"
             )
         finally:
-            # Cleanup temp directory
-            if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
+            pass
     
     def _ocr_to_searchable_pdf(
         self,

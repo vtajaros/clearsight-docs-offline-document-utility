@@ -17,7 +17,7 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
   const [imageToPdfFiles, setImageToPdfFiles] = useState<any[]>([])
   const [imageToPdfPageSize, setImageToPdfPageSize] = useState<string>('A4')
   const [imageToPdfOrientation, setImageToPdfOrientation] = useState<string>('Portrait')
-  const [imageToPdfMargin, setImageToPdfMargin] = useState<string>('0')
+  const [imageToPdfMargin, setImageToPdfMargin] = useState<string>('Small')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const fileIdMap = useRef<Map<any, string>>(new Map())
@@ -74,6 +74,23 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
     setHasUnsavedChanges?.(false)
   }
 
+  const handleSort = (type: string) => {
+    if (!type) return
+    setImageToPdfFiles((prev) => {
+      const sorted = [...prev].sort((a, b) => {
+        if (type === 'name-asc') return a.name.localeCompare(b.name)
+        if (type === 'name-desc') return b.name.localeCompare(a.name)
+        const dateA = a.lastModified || a.createdAt || (a instanceof File ? a.lastModified : 0)
+        const dateB = b.lastModified || b.createdAt || (b instanceof File ? b.lastModified : 0)
+        if (type === 'date-newest') return dateB - dateA
+        if (type === 'date-oldest') return dateA - dateB
+        return 0
+      })
+      setHasUnsavedChanges?.(true)
+      return sorted
+    })
+  }
+
   const handleImageToPdfSubmit = async () => {
     if (imageToPdfFiles.length === 0) return
     setLoading(true)
@@ -111,7 +128,6 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
           a.download = 'images_converted.pdf'
           a.click()
           setModal({ open: false, title: '', subtitle: '', onExport: () => {} })
-          clearImageToPdfFiles()
           setHasUnsavedChanges?.(false)
         }
       })
@@ -160,6 +176,16 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
               {imageToPdfFiles.length} {imageToPdfFiles.length === 1 ? 'Image' : 'Images'}
             </div>
             <div className="flex items-center gap-3">
+              <select
+                onChange={(e) => { handleSort(e.target.value); e.target.value = '' }}
+                className="px-3.5 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-zinc-200 rounded-lg transition-all cursor-pointer border border-zinc-700/50 outline-none"
+              >
+                <option value="">Sort by...</option>
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+                <option value="date-newest">Date (Newest)</option>
+                <option value="date-oldest">Date (Oldest)</option>
+              </select>
               <button
                 onClick={addMoreFiles}
                 className="px-3.5 py-2 text-xs font-semibold bg-zinc-800 hover:bg-zinc-750 text-zinc-200 rounded-lg transition-all cursor-pointer border border-zinc-700/50"
@@ -226,9 +252,9 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
               <div className="space-y-2">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Page Size</label>
                 <select value={imageToPdfPageSize} onChange={(e) => setImageToPdfPageSize(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm rounded-lg px-3 py-2 outline-none focus:border-violet-500 transition-all cursor-pointer">
-                  <option value="A4">A4</option>
-                  <option value="Letter">Letter</option>
-                  <option value="Legal">Letter</option>
+                  <option value="A4">A4 (8.27" x 11.69")</option>
+                  <option value="Letter">Letter (8.5" x 11")</option>
+                  <option value="Legal">Legal (8.5" x 14")</option>
                 </select>
               </div>
               <div className="space-y-2">
@@ -239,8 +265,13 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Margin (px)</label>
-                <input type="number" min="0" value={imageToPdfMargin} onChange={(e) => setImageToPdfMargin(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm rounded-lg px-3 py-2 outline-none focus:border-violet-500 transition-all font-mono" />
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Margin</label>
+                <select value={imageToPdfMargin} onChange={(e) => setImageToPdfMargin(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm rounded-lg px-3 py-2 outline-none focus:border-violet-500 transition-all cursor-pointer">
+                  <option value="None">None</option>
+                  <option value="Small">Small</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Large">Large</option>
+                </select>
               </div>
             </div>
 
