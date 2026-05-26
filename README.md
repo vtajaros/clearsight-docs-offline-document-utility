@@ -2,16 +2,23 @@
 
 ClearSight Docs is a privacy-first, fully local desktop application for PDF document manipulation and Optical Character Recognition (OCR). It utilizes a hybrid architecture, combining a lightweight Electron/React frontend with a high-performance Python FastAPI backend to ensure documents never leave the host machine.
 
-## Features
+## Key Highlights
 
-* **Merge PDFs**: Combine multiple PDF documents sequentially.
-* **Split PDF**: Extract specific page ranges or explode a document into individual single-page files.
-* **Delete Pages**: Selectively remove pages using an interactive, hardware-accelerated thumbnail grid and high-resolution preview.
-* **Compress PDF**: Reduce file sizes with Low, Medium, and High optimization presets.
-* **OCR PDF**: Convert scanned documents or images into selectable Plain Text (`.txt`) or fully Searchable PDFs using Tesseract OCR.
+* **100% Local & Private**: No cloud uploads, no subscriptions, and no internet required. Your sensitive documents never leave your machine.
+* **Blazing Fast Processing**: Leverages a dual-ingest strategy (Local Path Bypass) to circumvent standard HTTP upload limits, allowing instantaneous processing of multi-gigabyte files.
+* **Modern Desktop Experience**: A beautifully crafted, responsive dark UI featuring smooth micro-animations, drag-and-drop workspaces, hardware-accelerated thumbnail grids, and robust memory management via LRU caching.
+* **Real-time Feedback**: Complex operations like OCR feature live progress streaming via WebSockets, so you are always kept in the loop.
+
+## Core Features
+
+* **Merge PDFs**: Combine multiple PDF documents sequentially with drag-and-drop reordering and advanced sorting options (by name or date).
+* **Split PDF**: Extract specific page ranges or explode a document into individual single-page files seamlessly.
+* **Delete Pages**: Selectively remove pages using an interactive thumbnail grid and high-resolution previews.
+* **Compress PDF**: Reduce file sizes with Low, Medium, and High optimization presets utilizing intelligent image recompression and stream optimizations.
+* **OCR PDF**: Convert scanned documents or images into selectable Plain Text (`.txt`) or fully Searchable PDFs using the powerful Tesseract OCR engine.
 * **Format Conversion**: 
   * **PDF to Images**: Extract pages into high-quality PNG or JPEG archives.
-  * **Image to PDF**: Combine multiple image formats into a unified PDF document.
+  * **Image to PDF**: Combine multiple image formats into a unified PDF document with customizable page sizes, margins, and orientations.
 
 ## Architecture & Tech Stack
 
