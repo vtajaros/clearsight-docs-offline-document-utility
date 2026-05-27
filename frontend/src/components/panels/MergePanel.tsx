@@ -4,6 +4,8 @@ import type { DragEvent } from 'react'
 import { type CompletionModal, formatBytes, pickFiles, thumbnailCache } from '../../types'
 import { PdfThumbnail } from '../Thumbnails'
 import * as pdfjsLib from 'pdfjs-dist'
+import { useSimulatedProgress } from '../../hooks/useSimulatedProgress'
+import { ProgressBar } from '../ProgressBar'
 
 interface MergePanelProps {
   base: string
@@ -20,6 +22,7 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const fileIdMap = useRef<Map<any, string>>(new Map())
+  const { progress, label: progressLabel, start: startProgress, finish: finishProgress, cancel: cancelProgress } = useSimulatedProgress()
 
   const getFileId = (file: any): string => {
     if (!fileIdMap.current.has(file)) {
@@ -112,6 +115,13 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
     if (mergeFiles.length < 2) return
     setLoading(true); setError(null)
 
+    startProgress([
+      { target: 15, label: 'Reading documents...', delayMs: 400 },
+      { target: 50, label: 'Merging pages...', delayMs: 1200 },
+      { target: 80, label: 'Writing merged PDF...', delayMs: 2500 },
+      { target: 93, label: 'Finalizing...', delayMs: 4000 },
+    ])
+
     const formData = new FormData()
     mergeFiles.forEach((file) => {
       if (file.isElectron) formData.append('files_path', file.path)
@@ -126,6 +136,10 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
       }
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
+
+      finishProgress()
+      await new Promise(r => setTimeout(r, 400))
+
       setModal({
         open: true, title: 'Merge Complete', subtitle: 'Your merged file is ready to export.',
         onExport: () => {
@@ -135,6 +149,7 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
         }
       })
     } catch (err: any) {
+      cancelProgress()
       setError(err.message || 'An unexpected error occurred during Merge.')
     } finally {
       setLoading(false)
@@ -192,6 +207,12 @@ export function MergePanel({ base, loading, setLoading, setError, setModal, setH
               </button>
             </div>
           </div>
+
+          {loading && (
+            <div className="shrink-0 px-1">
+              <ProgressBar loading={loading} progress={progress} label={progressLabel} />
+            </div>
+          )}
 
           <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2">
             <div className="flex flex-wrap content-start gap-4 pb-4">

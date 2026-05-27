@@ -3,6 +3,8 @@ import { useState } from 'react'
 import type { DragEvent } from 'react'
 import { type CompletionModal, formatBytes, pickFiles, thumbnailCache } from '../../types'
 import { PdfThumbnail } from '../Thumbnails'
+import { useSimulatedProgress } from '../../hooks/useSimulatedProgress'
+import { ProgressBar } from '../ProgressBar'
 
 interface PdfToImagesPanelProps {
   base: string
@@ -17,6 +19,8 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
   const [pdfToImagesFile, setPdfToImagesFile] = useState<any | null>(null)
   const [pdfToImagesFormat, setPdfToImagesFormat] = useState<'PNG' | 'JPG'>('PNG')
   const [pdfToImagesDpi, setPdfToImagesDpi] = useState<string>('150')
+
+  const { progress, label: progressLabel, start: startProgress, finish: finishProgress, cancel: cancelProgress } = useSimulatedProgress()
 
   const handlePdfToImagesDragOver = (e: DragEvent<HTMLDivElement>) => { e.preventDefault() }
   const handlePdfToImagesDragLeave = () => {}
@@ -38,6 +42,13 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
     setLoading(true)
     setError(null)
 
+    startProgress([
+      { target: 15, label: 'Reading PDF...', delayMs: 300 },
+      { target: 45, label: 'Rendering pages...', delayMs: 1000 },
+      { target: 78, label: 'Encoding images...', delayMs: 2500 },
+      { target: 93, label: 'Packaging ZIP...', delayMs: 5000 },
+    ])
+
     const formData = new FormData()
     if (pdfToImagesFile.isElectron) {
       formData.append('file_path', pdfToImagesFile.path)
@@ -58,6 +69,9 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
       const url = URL.createObjectURL(blob)
       const downloadName = `${pdfToImagesFile.name.replace(/\.pdf$/i, '')}_images.zip`
       
+      finishProgress()
+      await new Promise(r => setTimeout(r, 400))
+
       setModal({
         open: true,
         title: 'Conversion Complete',
@@ -72,6 +86,7 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
         }
       })
     } catch (err: any) {
+      cancelProgress()
       setError(err.message || 'An unexpected error occurred during conversion.')
     } finally {
       setLoading(false)
@@ -121,7 +136,7 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
                 <p className="text-xs text-zinc-500 mt-0.5">{formatBytes(pdfToImagesFile.size)}</p>
               </div>
             </div>
-            <button onClick={() => { setPdfToImagesFile(null); thumbnailCache.delete('pdf-to-images-preview'); setHasUnsavedChanges?.(false); }} className="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-850 transition-all cursor-pointer">
+            <button onClick={() => { setPdfToImagesFile(null); thumbnailCache.delete('pdf-to-images-preview'); setHasUnsavedChanges?.(false); cancelProgress(); }} className="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-850 transition-all cursor-pointer">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -165,6 +180,10 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
                   ))}
                 </div>
               </div>
+            </div>
+
+            <div className="mb-4">
+              <ProgressBar loading={loading} progress={progress} label={progressLabel} />
             </div>
 
             <button

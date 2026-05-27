@@ -10,6 +10,9 @@ Request lifecycle:
     → CleanupFileResponse  (streams file, deletes tmp dir in __call__ finally)
 """
 import os
+import sys
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 import shutil
 import tempfile
 import json
@@ -427,6 +430,17 @@ async def split_into_pages(
 # ---------------------------------------------------------------------------
 # Compress  —  POST /api/compress
 # ---------------------------------------------------------------------------
+
+@app.get("/api/compress/diagnose")
+async def diagnose_pdf_endpoint(
+    file_path: str
+):
+    input_path = _validate_local_path(file_path)
+    if not input_path.name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF.")
+
+    result = _compress.diagnose_pdf(str(input_path))
+    return result
 
 @app.post("/api/compress")
 async def compress_pdf_endpoint(

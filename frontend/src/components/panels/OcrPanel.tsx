@@ -240,8 +240,25 @@ export function OcrPanel({
         </button>
 
         {loading && progress && progress.total > 0 && (
-          <div className="w-full bg-zinc-800 rounded-full h-1.5">
-            <div className="bg-violet-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${(progress.current / progress.total) * 100}%` }} />
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-zinc-400">
+                {progress.message || `Page ${progress.current} of ${progress.total}`}
+              </span>
+              <span className="text-xs font-medium text-violet-400">
+                {Math.round((progress.current / progress.total) * 100)}%
+              </span>
+            </div>
+            <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${(progress.current / progress.total) * 100}%`,
+                  background: 'linear-gradient(90deg, #7c3aed, #a855f7, #c084fc)',
+                  boxShadow: '0 0 8px rgba(167, 85, 247, 0.6)',
+                }}
+              />
+            </div>
           </div>
         )}
       </div>

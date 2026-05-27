@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import type { DragEvent } from 'react'
 import { type CompletionModal, formatBytes, pickFiles } from '../../types'
+import { useSimulatedProgress } from '../../hooks/useSimulatedProgress'
+import { ProgressBar } from '../ProgressBar'
 
 interface CompressPanelProps {
   base: string; loading: boolean; setLoading: (v: boolean) => void
@@ -12,47 +14,74 @@ interface CompressPanelProps {
 export function CompressPanel({ base, loading, setLoading, setError, setModal, setHasUnsavedChanges }: CompressPanelProps) {
   const [compressFile, setCompressFile] = useState<any | null>(null)
   const [compressLevel, setCompressLevel] = useState<'low' | 'medium' | 'high'>('medium')
+  const { progress, label: progressLabel, start: startProgress, finish: finishProgress, cancel: cancelProgress } = useSimulatedProgress()
+
   const handleCompressDragOver = (e: DragEvent<HTMLDivElement>) => { e.preventDefault() }
   const handleCompressDragLeave = () => {}
   const handleCompressDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0]
-      if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) { setCompressFile(file); setError(null); setHasUnsavedChanges(true) }
-      else setError('Only PDF files are supported.')
+      if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        setCompressFile(file); setError(null); setHasUnsavedChanges(true)
+      } else setError('Only PDF files are supported.')
     }
   }
 
   const handleCompressSubmit = async () => {
     if (!compressFile) return
     setLoading(true); setError(null)
+
     const formData = new FormData()
     if (compressFile.isElectron) formData.append('file_path', compressFile.path)
     else formData.append('file', compressFile)
     formData.append('compression_level', compressLevel)
 
+    startProgress([
+      { target: 15, label: 'Reading PDF structure...', delayMs: 600 },
+      { target: 35, label: 'Recompressing images...', delayMs: 1800 },
+      { target: 60, label: 'Recompressing images...', delayMs: 3500 },
+      { target: 78, label: 'Writing compressed file...', delayMs: 5500 },
+      { target: 88, label: 'Finalizing...', delayMs: 8000 },
+      { target: 93, label: 'Finalizing...', delayMs: 14000 },
+    ])
+
     try {
       const res = await fetch(`${base}/api/compress`, { method: 'POST', body: formData })
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || 'Compression failed.') }
+      cancelProgress()
+
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.detail || 'Compression failed.')
+      }
+
+      finishProgress()
+
       const stats = JSON.parse(res.headers.get('X-Compression-Stats') || '{}')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const downloadName = `${compressFile.name.replace(/\.pdf$/i, '')}_compressed.pdf`
       let subtitle = 'Your compressed file is ready to export.'
-      if (stats.original_size && stats.new_size && stats.reduction_percentage) {
+      if (stats.original_size && stats.new_size && stats.reduction_percentage !== undefined) {
         const origMB = (stats.original_size / (1024 * 1024)).toFixed(2)
         const newMB = (stats.new_size / (1024 * 1024)).toFixed(2)
         const pct = parseFloat(stats.reduction_percentage).toFixed(1)
         subtitle = `Reduced by ${pct}% (${origMB} MB → ${newMB} MB)`
       }
+
+      // Brief pause so user sees 100% before modal opens
+      await new Promise(r => setTimeout(r, 400))
+
       setModal({
         open: true, title: 'Compression Complete', subtitle,
         onExport: () => {
           const a = document.createElement('a'); a.href = url; a.download = downloadName; a.click()
-          setModal({ open: false, title: '', subtitle: '', onExport: () => {} }); setHasUnsavedChanges(false)
+          setModal({ open: false, title: '', subtitle: '', onExport: () => {} })
+          setHasUnsavedChanges(false)
         }
       })
     } catch (err: any) {
+      cancelProgress()
       setError(err.message || 'An unexpected error occurred during compression.')
     } finally {
       setLoading(false)
@@ -81,17 +110,24 @@ export function CompressPanel({ base, loading, setLoading, setError, setModal, s
       ) : (
         <div className="flex-1 min-h-0 flex flex-col justify-center gap-6 max-w-4xl mx-auto w-full">
           <div className="flex items-center justify-between p-4 bg-zinc-950/50 border border-zinc-800 rounded-xl">
-          <div className="flex items-center gap-3 min-w-0">
-            <svg className="w-8 h-8 text-red-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
-            <div className="min-w-0"><p className="text-sm font-semibold text-zinc-200 truncate max-w-md">{compressFile.name}</p><p className="text-xs text-zinc-500 mt-0.5">{formatBytes(compressFile.size)}</p></div>
-          </div>
-          <button onClick={() => { setCompressFile(null); setHasUnsavedChanges(false); }} className="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-850 transition-all cursor-pointer">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+            <div className="flex items-center gap-3 min-w-0">
+              <svg className="w-8 h-8 text-red-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-zinc-200 truncate max-w-md">{compressFile.name}</p>
+                <p className="text-xs text-zinc-500 mt-0.5">{formatBytes(compressFile.size)}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => { setCompressFile(null); setHasUnsavedChanges(false); cancelProgress() }}
+              disabled={loading}
+              className="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-850 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
           </div>
         </div>
       )}
-      
+
       <div className="shrink-0 w-full max-w-4xl mx-auto space-y-6">
         <div className="space-y-3">
           <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Compression Level</label>
@@ -103,8 +139,9 @@ export function CompressPanel({ base, loading, setLoading, setError, setModal, s
             ] as const).map(({ lvl, label, desc }) => (
               <button
                 key={lvl}
-                onClick={() => setCompressLevel(lvl)}
-                className={`flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-all ${
+                onClick={() => !loading && setCompressLevel(lvl)}
+                disabled={loading}
+                className={`flex flex-col items-start gap-1 p-3 rounded-lg border text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                   compressLevel === lvl
                     ? 'border-violet-500 bg-violet-500/10 text-violet-400'
                     : 'border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
@@ -116,6 +153,8 @@ export function CompressPanel({ base, loading, setLoading, setError, setModal, s
             ))}
           </div>
         </div>
+
+        <ProgressBar loading={loading} progress={progress} label={progressLabel} />
 
         <button
           disabled={!compressFile || loading}

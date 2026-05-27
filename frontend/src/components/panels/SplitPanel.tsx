@@ -1,7 +1,9 @@
 // frontend/src/components/panels/SplitPanel.tsx
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { DragEvent } from 'react'
 import { type SplitMode, type CompletionModal, formatBytes, pickFiles } from '../../types'
+import { useSimulatedProgress } from '../../hooks/useSimulatedProgress'
+import { ProgressBar } from '../ProgressBar'
 
 interface SplitPanelProps {
   base: string
@@ -17,6 +19,8 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
   const [splitFile, setSplitFile] = useState<any | null>(null)
   const [splitStartPage, setSplitStartPage] = useState(1)
   const [splitEndPage, setSplitEndPage] = useState(2)
+
+  const { progress, label: progressLabel, start: startProgress, finish: finishProgress, cancel: cancelProgress } = useSimulatedProgress()
 
   const resetSplitOutputs = () => setError(null)
 
@@ -34,6 +38,13 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
   const handleSplitSubmit = async () => {
     if (!splitFile) return
     setLoading(true); setError(null)
+
+    startProgress([
+      { target: 20, label: 'Reading PDF...', delayMs: 300 },
+      { target: 60, label: 'Splitting pages...', delayMs: 900 },
+      { target: 85, label: 'Writing output...', delayMs: 1800 },
+      { target: 93, label: 'Finalizing...', delayMs: 3000 },
+    ])
 
     const formData = new FormData()
     if (splitFile.isElectron) formData.append('file_path', splitFile.path)
@@ -57,6 +68,9 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
       const downloadName = splitMode === 'range' ? `${baseName}_p${splitStartPage}-${splitEndPage}.pdf` : `${baseName}_pages.zip`
       const subtitleText = splitMode === 'range' ? 'Your split PDF is ready to export.' : 'Your PDF pages are ready to export as ZIP.'
 
+      finishProgress()
+      await new Promise(r => setTimeout(r, 400))
+
       setModal({
         open: true, title: 'Split Complete', subtitle: subtitleText,
         onExport: () => {
@@ -66,6 +80,7 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
         }
       })
     } catch (err: any) {
+      cancelProgress()
       setError(err.message || 'An unexpected error occurred during Split.')
     } finally {
       setLoading(false)
@@ -112,7 +127,7 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
                 <p className="text-xs text-zinc-500 mt-0.5">{formatBytes(splitFile.size)}</p>
               </div>
             </div>
-            <button onClick={() => { setSplitFile(null); resetSplitOutputs(); setHasUnsavedChanges?.(false); }} className="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-850 transition-all cursor-pointer">
+            <button onClick={() => { setSplitFile(null); resetSplitOutputs(); setHasUnsavedChanges?.(false); cancelProgress(); }} className="p-1.5 text-zinc-500 hover:text-zinc-300 rounded-lg hover:bg-zinc-850 transition-all cursor-pointer">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -126,6 +141,8 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
               </div>
             ))}
           </div>
+
+          <ProgressBar loading={loading} progress={progress} label={progressLabel} />
 
           <button disabled={!splitFile || loading} onClick={handleSplitSubmit}
             className="shrink-0 w-full flex items-center justify-center gap-2 py-3 px-4 bg-violet-500 hover:bg-violet-600 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-violet-950/10 cursor-pointer">

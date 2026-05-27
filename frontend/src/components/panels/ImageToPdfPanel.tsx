@@ -3,6 +3,8 @@ import { useState, useRef } from 'react'
 import type { DragEvent } from 'react'
 import { type CompletionModal, formatBytes, pickFiles, imageThumbnailCache } from '../../types'
 import { ImageThumbnail } from '../Thumbnails'
+import { useSimulatedProgress } from '../../hooks/useSimulatedProgress'
+import { ProgressBar } from '../ProgressBar'
 
 interface ImageToPdfPanelProps {
   base: string
@@ -21,6 +23,7 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const fileIdMap = useRef<Map<any, string>>(new Map())
+  const { progress, label: progressLabel, start: startProgress, finish: finishProgress, cancel: cancelProgress } = useSimulatedProgress()
 
   const getFileId = (file: any): string => {
     if (!fileIdMap.current.has(file)) {
@@ -96,6 +99,13 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
     setLoading(true)
     setError(null)
 
+    startProgress([
+      { target: 20, label: 'Reading images...', delayMs: 400 },
+      { target: 55, label: 'Embedding images...', delayMs: 1200 },
+      { target: 82, label: 'Writing PDF...', delayMs: 2500 },
+      { target: 93, label: 'Finalizing...', delayMs: 4000 },
+    ])
+
     const formData = new FormData()
     imageToPdfFiles.forEach((file) => {
       if (file.isElectron) {
@@ -118,6 +128,9 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       
+      finishProgress()
+      await new Promise(r => setTimeout(r, 400))
+
       setModal({
         open: true,
         title: 'Conversion Complete',
@@ -132,6 +145,7 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
         }
       })
     } catch (err: any) {
+      cancelProgress()
       setError(err.message || 'An unexpected error occurred during conversion.')
     } finally {
       setLoading(false)
@@ -273,6 +287,10 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
                   <option value="Large">Large</option>
                 </select>
               </div>
+            </div>
+
+            <div className="mb-4">
+              <ProgressBar loading={loading} progress={progress} label={progressLabel} />
             </div>
 
             <button

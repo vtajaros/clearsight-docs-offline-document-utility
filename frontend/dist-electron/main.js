@@ -67,11 +67,19 @@ function waitForBackend(port, retries = 40, intervalMs = 500) {
 }
 function killBackend() {
 	if (backendProcess) {
-		backendProcess.kill();
+		const pid = backendProcess.pid;
+		if (pid) if (process.platform === "win32") spawn("taskkill", [
+			"/pid",
+			String(pid),
+			"/t",
+			"/f"
+		], { stdio: "ignore" });
+		else backendProcess.kill("SIGTERM");
 		backendProcess = null;
 	}
 }
 var lastUsedDirectory = void 0;
+var allowedReadPaths = /* @__PURE__ */ new Set();
 function getMimeType(filePath) {
 	const ext = path.extname(filePath).toLowerCase();
 	if (ext === ".pdf") return "application/pdf";
@@ -89,11 +97,19 @@ ipcMain.handle("dialog:openFiles", async (_event, options) => {
 			extensions: ["*"]
 		}]
 	});
-	if (!canceled && filePaths.length > 0) lastUsedDirectory = path.dirname(filePaths[0]);
+	if (!canceled && filePaths.length > 0) {
+		lastUsedDirectory = path.dirname(filePaths[0]);
+		filePaths.forEach((p) => allowedReadPaths.add(p));
+	}
 	if (canceled) return [];
-	return filePaths.map((filePath) => {
-		const stats = fs.statSync(filePath);
-		return {
+	return filePaths.flatMap((filePath) => {
+		let stats;
+		try {
+			stats = fs.statSync(filePath);
+		} catch {
+			return [];
+		}
+		return [{
 			path: filePath,
 			name: path.basename(filePath),
 			size: stats.size,
@@ -101,14 +117,14 @@ ipcMain.handle("dialog:openFiles", async (_event, options) => {
 			isElectron: true,
 			lastModified: stats.mtimeMs,
 			createdAt: stats.birthtimeMs
-		};
+		}];
 	});
 });
 ipcMain.handle("file:read", async (_event, filePath) => {
+	if (!allowedReadPaths.has(filePath)) throw new Error(`Access denied: ${filePath} was not selected by the user.`);
 	const buffer = await fs.promises.readFile(filePath);
 	return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 });
-console.log("appPath:", app.getAppPath());
 app.whenReady().then(async () => {
 	const port = await findFreePort();
 	await startBackend(port);
@@ -135,9 +151,6 @@ app.whenReady().then(async () => {
 		else mainWindow?.maximize();
 	});
 	ipcMain.handle("titlebar:close", () => mainWindow?.close());
-	mainWindow.webContents.on("did-finish-load", () => {
-		mainWindow?.webContents.executeJavaScript(`window.__BACKEND_PORT__ = ${port}`);
-	});
 	if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
 	else mainWindow.loadFile("dist/index.html");
 });
