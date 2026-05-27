@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getPort: (): Promise<number> =>
         ipcRenderer.invoke('get-port'),
 
+    getToken: (): Promise<string> =>
+        ipcRenderer.invoke('get-token'),
+
     titlebar: {
         minimize: () => ipcRenderer.invoke('titlebar:minimize'),
         maximize: () => ipcRenderer.invoke('titlebar:maximize'),

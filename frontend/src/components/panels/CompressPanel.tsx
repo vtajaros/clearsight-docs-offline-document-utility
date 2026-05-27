@@ -47,7 +47,12 @@ export function CompressPanel({ base, loading, setLoading, setError, setModal, s
     ])
 
     try {
-      const res = await fetch(`${base}/api/compress`, { method: 'POST', body: formData })
+      const token = window.electronAPI?.getToken ? await window.electronAPI.getToken() : ''
+      const res = await fetch(`${base}/api/compress`, { 
+        method: 'POST', 
+        body: formData,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
       cancelProgress()
 
       if (!res.ok) {

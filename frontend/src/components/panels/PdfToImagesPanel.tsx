@@ -59,7 +59,12 @@ export function PdfToImagesPanel({ base, loading, setLoading, setError, setModal
     formData.append('dpi', pdfToImagesDpi)
 
     try {
-      const res = await fetch(`${base}/api/pdf-to-images`, { method: 'POST', body: formData })
+      const token = window.electronAPI?.getToken ? await window.electronAPI.getToken() : ''
+      const res = await fetch(`${base}/api/pdf-to-images`, { 
+        method: 'POST', 
+        body: formData,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}))
         throw new Error(detail.detail || 'Conversion failed.')

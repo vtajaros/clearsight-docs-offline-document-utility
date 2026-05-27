@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +40,19 @@ from services.pdf_delete_service import PdfDeleteService
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="ClearSight Docs API", version="2.0.0")
+
+import secrets
+API_TOKEN = os.environ.get("CLEARSIGHT_API_TOKEN")
+if not API_TOKEN:
+    API_TOKEN = secrets.token_hex(32)
+    print(f"WARN: CLEARSIGHT_API_TOKEN not set in environment. Using generated dev token: {API_TOKEN}")
+
+async def verify_token(authorization: str | None = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token.")
+    token = authorization.split(" ")[1]
+    if not secrets.compare_digest(token, API_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid token.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -275,6 +288,7 @@ async def ocr_pdf(
     force_ocr:     Annotated[bool, Form()] = False,
     include_page_separators: Annotated[bool, Form()] = False,
     job_id: Annotated[str, Form()] = "",
+    _=Depends(verify_token),
 ):
     input_path, tmp = input_data
     if not input_path.name.lower().endswith(".pdf"):
@@ -316,10 +330,19 @@ async def ocr_pdf(
             except Exception:
                 pass
 
-        result = await loop.run_in_executor(
-            _executor,
-            lambda: _ocr.process_pdf(str(input_path), str(output_path), settings, sync_callback)
-        )
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _ocr.process_pdf(str(input_path), str(output_path), settings, sync_callback)
+                ),
+                timeout=300  # 5 minutes max per OCR job
+            )
+        except asyncio.TimeoutError:
+            # The underlying thread cannot be forcefully killed (Python limitation),
+            # but the asyncio timeout prevents new requests from waiting forever
+            # and caps queue starvation to max_workers * timeout seconds
+            raise HTTPException(status_code=504, detail="OCR processing timed out. The document may be too large or complex.")
 
         if job_id:
             await _ws_manager.send(job_id, {"current": -1, "total": -1, "message": "done"})
@@ -344,6 +367,7 @@ async def ocr_pdf(
 @app.post("/api/merge")
 async def merge_pdfs(
     input_data: Annotated[tuple[list[Path], Path], Depends(resolve_multiple_inputs)],
+    _=Depends(verify_token),
 ):
     input_paths, tmp = input_data
 
@@ -356,7 +380,17 @@ async def merge_pdfs(
 
     with _managed_tmp(tmp):
         output_path = str(tmp / "merged.pdf")
-        _merge.merge_pdfs([str(p) for p in input_paths], output_path)
+        loop = asyncio.get_running_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _merge.merge_pdfs([str(p) for p in input_paths], output_path)
+                ),
+                timeout=120
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Merge processing timed out.")
 
         return CleanupFileResponse(
             path=output_path,
@@ -375,6 +409,7 @@ async def split_by_range(
     start_page: Annotated[int, Form(ge=1)],
     end_page:   Annotated[int, Form(ge=1)],
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
+    _=Depends(verify_token),
 ):
     input_path, tmp = input_data
     if not input_path.name.lower().endswith(".pdf"):
@@ -386,7 +421,17 @@ async def split_by_range(
 
     with _managed_tmp(tmp):
         output_path = tmp / "split.pdf"
-        _split.split_by_range(str(input_path), str(output_path), start_page, end_page)
+        loop = asyncio.get_running_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _split.split_by_range(str(input_path), str(output_path), start_page, end_page)
+                ),
+                timeout=120
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Split processing timed out.")
 
         return CleanupFileResponse(
             path=str(output_path),
@@ -403,6 +448,7 @@ async def split_by_range(
 @app.post("/api/split/pages")
 async def split_into_pages(
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
+    _=Depends(verify_token),
 ):
     """Split a PDF into individual single-page PDFs returned as a zip archive."""
     input_path, tmp = input_data
@@ -412,7 +458,17 @@ async def split_into_pages(
 
     with _managed_tmp(tmp):
         pages_dir = tmp / "pages"
-        _split.split_into_pages(str(input_path), str(pages_dir))
+        loop = asyncio.get_running_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _split.split_into_pages(str(input_path), str(pages_dir))
+                ),
+                timeout=120
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Split processing timed out.")
 
         zip_path = tmp / f"{stem}_pages.zip"
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -433,19 +489,28 @@ async def split_into_pages(
 
 @app.get("/api/compress/diagnose")
 async def diagnose_pdf_endpoint(
-    file_path: str
+    file_path: str,
+    _=Depends(verify_token),
 ):
     input_path = _validate_local_path(file_path)
     if not input_path.name.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="File must be a PDF.")
 
-    result = _compress.diagnose_pdf(str(input_path))
+    loop = asyncio.get_running_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(_executor, lambda: _compress.diagnose_pdf(str(input_path))),
+            timeout=120
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Diagnose processing timed out.")
     return result
 
 @app.post("/api/compress")
 async def compress_pdf_endpoint(
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
     compression_level: Annotated[str, Form()] = "medium",
+    _=Depends(verify_token),
 ):
     input_path, tmp = input_data
     if not input_path.name.lower().endswith(".pdf"):
@@ -457,7 +522,17 @@ async def compress_pdf_endpoint(
 
     with _managed_tmp(tmp):
         output_path = tmp / "compressed.pdf"
-        result = _compress.compress_pdf(str(input_path), str(output_path), compression_level)
+        loop = asyncio.get_running_loop()
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _compress.compress_pdf(str(input_path), str(output_path), compression_level)
+                ),
+                timeout=120
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Compress processing timed out.")
 
         stats = {
             "original_size": result["original_size"],
@@ -487,6 +562,7 @@ async def pdf_to_images_endpoint(
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
     image_format: Annotated[str, Form()] = "PNG",
     dpi: Annotated[int, Form()] = 150,
+    _=Depends(verify_token),
 ):
     input_path, tmp = input_data
     if not input_path.name.lower().endswith(".pdf"):
@@ -498,9 +574,19 @@ async def pdf_to_images_endpoint(
 
     with _managed_tmp(tmp):
         output_zip_path = tmp / f"{stem}_images.zip"
-        _pdf_to_images.convert_pdf_to_images_zip(
-            str(input_path), str(output_zip_path), image_format.upper(), dpi
-        )
+        loop = asyncio.get_running_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _pdf_to_images.convert_pdf_to_images_zip(
+                        str(input_path), str(output_zip_path), image_format.upper(), dpi
+                    )
+                ),
+                timeout=120
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="PDF to Images processing timed out.")
 
         return CleanupFileResponse(
             path=str(output_zip_path),
@@ -520,6 +606,7 @@ async def image_to_pdf_endpoint(
     page_size: Annotated[str, Form()] = "A4",
     orientation: Annotated[str, Form()] = "Portrait",
     margin: Annotated[str, Form()] = "Small",
+    _=Depends(verify_token),
 ):
     input_paths, tmp = input_data
 
@@ -529,9 +616,19 @@ async def image_to_pdf_endpoint(
 
     with _managed_tmp(tmp):
         output_path = tmp / "output.pdf"
-        _image_to_pdf.convert_images_to_pdf(
-            [str(p) for p in input_paths], str(output_path), page_size, orientation, margin
-        )
+        loop = asyncio.get_running_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _image_to_pdf.convert_images_to_pdf(
+                        [str(p) for p in input_paths], str(output_path), page_size, orientation, margin
+                    )
+                ),
+                timeout=120
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Image to PDF processing timed out.")
 
         return CleanupFileResponse(
             path=str(output_path),
@@ -549,6 +646,7 @@ async def image_to_pdf_endpoint(
 async def delete_pdf_pages(
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
     pages_to_delete: Annotated[str, Form()] = "[]",
+    _=Depends(verify_token),
 ):
     input_path, tmp = input_data
     if not input_path.name.lower().endswith(".pdf"):
@@ -564,8 +662,17 @@ async def delete_pdf_pages(
 
     with _managed_tmp(tmp):
         output_path = tmp / "deleted.pdf"
+        loop = asyncio.get_running_loop()
         try:
-            _delete_pages.delete_pages(str(input_path), str(output_path), pages_list)
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _delete_pages.delete_pages(str(input_path), str(output_path), pages_list)
+                ),
+                timeout=120
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Delete processing timed out.")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 

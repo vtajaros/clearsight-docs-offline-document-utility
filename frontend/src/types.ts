@@ -40,6 +40,7 @@ declare global {
       }): Promise<ElectronFile[]>;
       readFile(filePath: string): Promise<ArrayBuffer>;
       getPort(): Promise<number>;
+      getToken(): Promise<string>;
       titlebar: {
         minimize(): Promise<void>
         maximize(): Promise<void>

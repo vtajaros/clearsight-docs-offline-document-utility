@@ -217,9 +217,11 @@ export function DeletePagesPanel({ base, loading, setLoading, setError, setModal
         formData.append('file', file)
       }
 
+      const token = window.electronAPI?.getToken ? await window.electronAPI.getToken() : ''
       const res = await fetch(`${base}/api/delete-pages`, {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       })
 
       if (!res.ok) {

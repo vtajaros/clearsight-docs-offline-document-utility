@@ -57,7 +57,12 @@ export function SplitPanel({ base, loading, setLoading, setError, setModal, setH
     }
 
     try {
-      const res = await fetch(`${base}${endpoint}`, { method: 'POST', body: formData })
+      const token = window.electronAPI?.getToken ? await window.electronAPI.getToken() : ''
+      const res = await fetch(`${base}${endpoint}`, { 
+        method: 'POST', 
+        body: formData,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}))
         throw new Error(detail.detail || 'Splitting failed.')

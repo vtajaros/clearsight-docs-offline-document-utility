@@ -119,7 +119,12 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
     formData.append('margin', imageToPdfMargin)
 
     try {
-      const res = await fetch(`${base}/api/image-to-pdf`, { method: 'POST', body: formData })
+      const token = window.electronAPI?.getToken ? await window.electronAPI.getToken() : ''
+      const res = await fetch(`${base}/api/image-to-pdf`, { 
+        method: 'POST', 
+        body: formData,
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      })
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}))
         throw new Error(detail.detail || 'Conversion failed.')

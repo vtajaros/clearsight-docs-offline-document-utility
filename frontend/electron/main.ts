@@ -4,6 +4,9 @@ import * as path from 'path'
 import * as net from 'net'
 import { fileURLToPath } from 'url'
 import * as fs from 'fs'
+import * as crypto from 'crypto'
+
+const apiToken = crypto.randomUUID()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -41,6 +44,7 @@ async function startBackend(port: number): Promise<void> {
 
     backendProcess = spawn(backendExecutable, args, {
         cwd,
+        env: { ...process.env, CLEARSIGHT_API_TOKEN: apiToken },
         stdio: 'pipe',
         detached: false,
     })
@@ -145,6 +149,7 @@ app.whenReady().then(async () => {
     await startBackend(port)
 
     ipcMain.handle('get-port', () => port)
+    ipcMain.handle('get-token', () => apiToken)
 
     Menu.setApplicationMenu(null)
     mainWindow = new BrowserWindow({
