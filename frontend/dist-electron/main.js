@@ -4,7 +4,9 @@ import * as path from "path";
 import * as net from "net";
 import { fileURLToPath } from "url";
 import * as fs from "fs";
+import * as crypto from "crypto";
 //#region electron/main.ts
+var apiToken = crypto.randomUUID();
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var backendProcess = null;
@@ -38,6 +40,10 @@ async function startBackend(port) {
 		"127.0.0.1"
 	], {
 		cwd: isDev ? backendBase : void 0,
+		env: {
+			...process.env,
+			CLEARSIGHT_API_TOKEN: apiToken
+		},
 		stdio: "pipe",
 		detached: false
 	});
@@ -129,6 +135,7 @@ app.whenReady().then(async () => {
 	const port = await findFreePort();
 	await startBackend(port);
 	ipcMain.handle("get-port", () => port);
+	ipcMain.handle("get-token", () => apiToken);
 	Menu.setApplicationMenu(null);
 	mainWindow = new BrowserWindow({
 		width: 1200,

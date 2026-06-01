@@ -523,16 +523,28 @@ async def compress_pdf_endpoint(
     with _managed_tmp(tmp):
         output_path = tmp / "compressed.pdf"
         loop = asyncio.get_running_loop()
+        # Scale timeout by file size and compression level.
+        # Image recompression on large PDFs is CPU-bound and can take
+        # several minutes. Low mode is fast; medium/high need more headroom.
+        file_size_mb = input_path.stat().st_size / (1024 * 1024)
+        if compression_level == "low":
+            compress_timeout = max(60, file_size_mb * 0.5)
+        else:
+            compress_timeout = max(120, file_size_mb * 3)
+
         try:
             result = await asyncio.wait_for(
                 loop.run_in_executor(
                     _executor,
                     lambda: _compress.compress_pdf(str(input_path), str(output_path), compression_level)
                 ),
-                timeout=120
+                timeout=compress_timeout
             )
         except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail="Compress processing timed out.")
+            raise HTTPException(
+                status_code=504,
+                detail=f"Compress processing timed out after {compress_timeout:.0f}s. Try 'Low' compression for very large files."
+            )
 
         stats = {
             "original_size": result["original_size"],

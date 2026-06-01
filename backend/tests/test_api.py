@@ -50,8 +50,8 @@ def _make_image(tmp_path: Path, name: str = "test.png", format: str = "PNG") -> 
 
 @pytest.fixture(scope="module")
 def client():
-    from api import app
-    with TestClient(app) as c:
+    import api as api_module
+    with TestClient(api_module.app, headers={"Authorization": f"Bearer {api_module.API_TOKEN}"}) as c:
         yield c
 
 
