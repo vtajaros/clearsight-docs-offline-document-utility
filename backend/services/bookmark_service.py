@@ -107,161 +107,437 @@ class BookmarkService:
     def extract_headings(self, pdf_path: str) -> tuple[list[BookmarkNode], bool]:
         import re
         from collections import defaultdict
-        
-        spans = []
+
+        # chapter_number_map: page_num -> digit string for large standalone digits
+        # populated in Pass 1, used in Pass 6b
+        chapter_number_map: dict[int, str] = {}
+
         doc = None
-        total_pages = 0
         try:
             doc = fitz.open(pdf_path)
             total_pages = len(doc)
+
+            # ----------------------------------------------------------------
+            # Pass 1: Line-level span assembly
+            # Concatenate all spans within a fitz line to reconstruct words
+            # split by drop-caps or ligature glyph substitution.
+            # Use max_size (not dominant_size) for clustering — the largest
+            # span on the line is the intended heading size.
+            # ----------------------------------------------------------------
+            lines: list[dict] = []
+
             for page_index in range(total_pages):
                 page = doc[page_index]
-                blocks = page.get_text("dict").get("blocks", [])
-                for block in blocks:
+                page_num = page_index + 1
+
+                # Skip front cover (p1-2) and back cover (last 2 pages)
+                if page_num <= 2 or page_num >= total_pages - 1:
+                    continue
+
+                # Detect embedded datasheet / figure pages:
+                # if the majority of text on this page is very small (< 8pt),
+                # it is a reproduced document image, not chapter content — skip it
+                all_page_spans = [
+                    s for block in page.get_text("dict").get("blocks", [])
+                    if "lines" in block
+                    for line in block["lines"]
+                    for s in line["spans"]
+                    if s["text"].strip()
+                ]
+                if all_page_spans:
+                    tiny = sum(1 for s in all_page_spans if s["size"] < 8.0)
+                    if tiny / len(all_page_spans) > 0.5:
+                        continue  # skip this page — it's a datasheet/figure page
+
+                for block in page.get_text("dict").get("blocks", []):
                     if "lines" not in block:
                         continue
                     for line in block["lines"]:
-                        for span in line["spans"]:
-                            spans.append({
-                                "text": span["text"].strip(),
-                                "size": span["size"],
-                                "flags": span["flags"],
-                                "bbox": span["bbox"],
-                                "page_num": page_index + 1
-                            })
+                        raw_spans = [s for s in line["spans"] if s["text"].strip()]
+                        if not raw_spans:
+                            continue
+
+                        # Reconstruct line text with correct spacing.
+                        # The PDF uses drop-cap rendering: large initial letter
+                        # followed by smaller continuation spans, sometimes with
+                        # no space between separate words (e.g. 'urrent' + 'in'
+                        # -> "urrentin"). Fix: insert a space between spans when:
+                        # - the previous span ends with a lowercase letter AND
+                        #   the next span starts with a lowercase letter AND
+                        #   neither span has a leading/trailing space
+                        # - the next span is a known standalone short word
+                        #   that has no leading space in the raw text
+                        combined_parts = []
+                        for idx, s in enumerate(raw_spans):
+                            text = s["text"]
+                            if idx == 0:
+                                combined_parts.append(text)
+                                continue
+                            prev = raw_spans[idx - 1]
+                            prev_text = prev["text"]
+                            prev_size = prev["size"]
+                            curr_size = s["size"]
+
+                            # Only insert a space when ALL of these are true:
+                            # 1. No existing space at boundary
+                            # 2. Font size CHANGES between spans (drop-cap -> body)
+                            # 3. Previous span is a short drop-cap (<=3 chars after strip)
+                            #    OR current span starts a new word (has leading space)
+                            has_boundary_space = (
+                                (prev_text and prev_text[-1] == ' ')
+                                or (text and text[0] == ' ')
+                            )
+                            size_changes = abs(prev_size - curr_size) > 1.0
+                            prev_is_dropcap = len(prev_text.strip()) <= 3
+                            curr_starts_word = (
+                                text and text[0].isalpha()
+                                and prev_text and prev_text[-1].isalpha()
+                                and prev_text[-1].islower()
+                                and text[0].islower()
+                                and size_changes
+                                and not prev_is_dropcap
+                            )
+
+                            if not has_boundary_space and size_changes and prev_is_dropcap:
+                                # Drop-cap initial followed by continuation —
+                                # the continuation already belongs to the same word
+                                # so no space needed (e.g. 'T' + 'he' = 'The')
+                                combined_parts.append(text)
+                            elif not has_boundary_space and curr_starts_word:
+                                combined_parts.append(' ')
+                                combined_parts.append(text)
+                            else:
+                                combined_parts.append(text)
+
+                        combined_text = "".join(combined_parts).strip()
+                        combined_text = re.sub(r'  +', ' ', combined_text)
+                        if not combined_text:
+                            continue
+
+                        max_size = max(s["size"] for s in raw_spans)
+
+                        # Capture large standalone digit lines as chapter numbers
+                        if re.match(r'^\d{1,2}$', combined_text) and max_size >= 40.0:
+                            chapter_number_map[page_num] = combined_text
+                            continue
+
+                        lines.append({
+                            "text": combined_text,
+                            "max_size": max_size,
+                            "dominant_size": max_size,
+                            "page_num": page_num,
+                            "bbox_y": line["bbox"][1],
+                        })
+
         finally:
             if doc is not None:
                 doc.close()
-                
-        print(f"extract_headings: {len(spans)} total spans found")
 
-        if len(spans) < 20:
-            return ([], False)
-            
-        filtered_spans = []
-        for span in spans:
-            text = span["text"]
-            if not text:
-                continue
-            # Skip purely numeric (page numbers, chapter numbers)
-            if re.match(r'^\d+$', text):
-                continue
-            # Skip single characters (drop-caps, decorative letters)
-            if len(text) <= 1:
-                continue
-            # Skip short ALL-CAPS fragments (decorative split words like "IRCUIT", "NALYSIS")
-            if len(text) < 8 and text == text.upper() and text.isalpha():
-                continue
-            # Skip very small text
-            if span["size"] < 8.0:
-                continue
-            # Skip cover page (page 1) — decorative title text, not content headings
-            if span["page_num"] == 1:
-                continue
-            filtered_spans.append({
-                "text": span["text"],
-                "size": span["size"],
-                "page_num": span["page_num"],
-                "bbox_y": span.get("bbox", [0, 0, 0, 0])[1]
-            })
-            
-        # Merge consecutive same-page same-size spans that are true line
-        # continuations (bbox_y within 60px). Skips duplicate shadow renders
-        # which share the same page and size but have nearly identical bbox_y.
-        merged_spans = []
+        # ----------------------------------------------------------------
+        # Pass 1b: Merge section-number prefix lines with title lines
+        # "1–1" at y=69.1 and "The Atom" at y=69.5 -> "1–1 The Atom"
+        # Condition: same page, next line within 2px vertically,
+        # current line matches section number pattern
+        # ----------------------------------------------------------------
+        section_num_pattern = re.compile(r'^\d{1,2}[–\-]\d{1,2}(?:\s|$)')
+        merged_lines: list[dict] = []
         i = 0
-        while i < len(filtered_spans):
-            current = filtered_spans[i]
-            j = i + 1
+        while i < len(lines):
+            current = lines[i]
+            # Check if this line is a standalone section number
+            if (section_num_pattern.match(current["text"].strip())
+                    and i + 1 < len(lines)):
+                nxt = lines[i + 1]
+                if (nxt["page_num"] == current["page_num"]
+                        and abs(nxt["bbox_y"] - current["bbox_y"]) <= 2.0):
+                    # Merge: prepend the section number to the title
+                    merged_text = current["text"].strip() + " " + nxt["text"].strip()
+                    merged_text = re.sub(r'  +', ' ', merged_text).strip()
+                    merged_lines.append({
+                        "text": merged_text,
+                        "max_size": max(current["max_size"], nxt["max_size"]),
+                        "dominant_size": max(current["dominant_size"], nxt["dominant_size"]),
+                        "page_num": current["page_num"],
+                        "bbox_y": current["bbox_y"],
+                    })
+                    i += 2
+                    continue
+            merged_lines.append(current)
+            i += 1
+        lines = merged_lines
+
+        if len(lines) < 10:
+            return ([], False)
+
+        # ----------------------------------------------------------------
+        # Pass 2: Filter noise lines
+        # ----------------------------------------------------------------
+        def is_noise(text: str) -> bool:
+            # Pure digits
+            if re.match(r'^\d+$', text):
+                return True
+            # Single character
+            if len(text) <= 1:
+                return True
+            # Spaced-letter pattern: "H I S T O R Y  N O T E"
+            tokens = text.split()
+            if len(tokens) >= 4 and all(len(t) <= 2 for t in tokens):
+                return True
+            # Lines starting with non-alphanumeric (formula fragments: "}BASE", "–X", "=  –X")
+            if text and not text[0].isalnum() and text[0] not in ('"', "'"):
+                return True
+            # Formula/equation patterns: contains = with surrounding math
+            # Catches "C2R = –0.625 V", "VIN21###1", "= –X"
+            if re.search(r'[=\#\}]', text):
+                return True
+            # Part number / component identifier patterns: "2N5484", "MMBF5484", "BC547"
+            # Letter(s) + digits >= 3, or digits + letter(s) — datatable entries
+            if re.match(r'^[A-Z]{1,4}\d{3,}', text) or re.match(r'^\d[A-Z]\d{3,}', text):
+                return True
+            # Symbol-only lines (math, formulas)
+            if re.match(r'^[\-\–\—\(\)\+\=\/\\\.\,\d\s\#\}]+$', text):
+                return True
+            # All-caps short words: company logos, decorative headers, edition markers
+            # "ANALOG", "DEVICES", "GLOBAL", "EDITION", "FEATURES", "HIGHLIGHTS"
+            # Use len <= 12 to catch "HIGHLIGHTS" (10) and similar
+            no_space = text.replace(' ', '')
+            if (no_space == no_space.upper()
+                    and no_space.replace('-', '').isalpha()
+                    and len(no_space) <= 12):
+                return True
+            # Short with no letters
+            if len(text) <= 4 and not any(c.isalpha() for c in text):
+                return True
+            # Parenthetical-only: "(FETs)", "( )", "(    )"
+            stripped = text.strip()
+            if stripped.startswith('(') and stripped.endswith(')'):
+                inner = stripped[1:-1].strip()
+                if not inner or len(inner) <= 8 or not any(c.isalpha() for c in inner):
+                    return True
+            # Garbled glyph encoding: line starts lowercase AND contains
+            # mid-word uppercase — indicates corrupted PDF text layer
+            # e.g. "nStrumentation amplifierS", "i Solation a mplifier S"
+            # Exception: allow lines starting uppercase (normal title case)
+            if (text and text[0].islower()
+                    and re.search(r'[a-zA-Z][A-Z][a-z]', text)):
+                return True
+            return False
+
+        filtered_lines = []
+        for line in lines:
+            text = line["text"]
+            size = line["max_size"]  # Switched to max_size
+
+            if is_noise(text):
+                continue
+            if size < 10.0:
+                continue
+
+            filtered_lines.append(line)
+
+        if not filtered_lines:
+            return ([], True)
+
+        # ----------------------------------------------------------------
+        # Pass 3: Fix concatenated words
+        # ----------------------------------------------------------------
+        def fix_concatenated_words(text: str) -> str:
+            # "11–1The" -> "11–1 The", "15–6Active" -> "15–6 Active"
+            # Digit immediately adjacent to a letter with no space
+            fixed = re.sub(r'(\d)([A-Za-z])', r'\1 \2', text)
+            # "BipolarJunction" -> "Bipolar Junction"
+            fixed = re.sub(r'([a-z])([A-Z])', r'\1 \2', fixed)
+            # "FETAmplifiers" -> "FET Amplifiers"
+            fixed = re.sub(r'([A-Z]{2,})([A-Z][a-z])', r'\1 \2', fixed)
+            # Suffix split: ONLY apply when preceding segment is >= 5 chars
+            # and suffix is a word that is never a word-ending in English.
+            # "Introductionto" -> "Introduction to"  (10 chars before "to") OK
+            # "Juntion" would need "on" but "Juncti" is 6 chars — excluded
+            # because "on"/"or"/"in" are too common as word endings.
+            # Safe suffixes: "and", "the", "for", "by", "of"
+            fixed = re.sub(
+                r'([a-z]{5,})(and|the|for|by|of)([A-Z])',
+                r'\1 \2 \3', fixed
+            )
+            fixed = re.sub(
+                r'([a-z]{5,})(and|the|for|by|of)$',
+                r'\1 \2', fixed
+            )
+            # "Introductionto", "Answersto" — "to" only after >= 6 chars
+            fixed = re.sub(
+                r'([a-z]{6,})(to)([A-Z\s]|$)',
+                lambda m: f'{m.group(1)} {m.group(2)}{m.group(3)}', fixed
+            )
+            return fixed
+
+        for line in filtered_lines:
+            line["text"] = fix_concatenated_words(line["text"])
+
+        # ----------------------------------------------------------------
+        # Pass 4: Body text exclusion (uses max_size now)
+        # ----------------------------------------------------------------
+        size_pages: dict = defaultdict(set)
+        for line in filtered_lines:
+            size_key = round(line["max_size"] * 2) / 2
+            size_pages[size_key].add(line["page_num"])
+
+        body_text_sizes: set = set()
+        for size_key, pages in size_pages.items():
+            if len(pages) > total_pages * 0.5:
+                body_text_sizes.add(size_key)
+
+        heading_lines = []
+        for line in filtered_lines:
+            size_key = round(line["max_size"] * 2) / 2
+            if size_key not in body_text_sizes:
+                heading_lines.append(line)
+
+        if not heading_lines:
+            return ([], True)
+
+        # ----------------------------------------------------------------
+        # Pass 5: Size clustering
+        # ----------------------------------------------------------------
+        unique_sizes = sorted(
+            set(round(l["max_size"] * 2) / 2 for l in heading_lines),
+            reverse=True
+        )
+
+        clusters: list[float] = []
+        for size in unique_sizes:
+            merged = False
+            for i, c in enumerate(clusters):
+                if abs(c - size) / max(c, size) < 0.10:
+                    merged = True
+                    break
+            if not merged:
+                clusters.append(size)
+
+        top_clusters = clusters[:3]
+        heading_size_to_level: dict[float, int] = {
+            c: idx + 1 for idx, c in enumerate(top_clusters)
+        }
+
+        # ----------------------------------------------------------------
+        # Pass 6: Multi-line title merging
+        # ----------------------------------------------------------------
+        merged_heading_lines: list[dict] = []
+        i = 0
+        while i < len(heading_lines):
+            current = heading_lines[i]
+            cur_size_key = round(current["max_size"] * 2) / 2
+
+            if cur_size_key not in heading_size_to_level:
+                merged_heading_lines.append(current)
+                i += 1
+                continue
+
             combined_text = current["text"]
-            last_y = current.get("bbox_y", 0)
-            while j < len(filtered_spans):
-                nxt = filtered_spans[j]
+            last_y = current["bbox_y"]
+            j = i + 1
+
+            while j < len(heading_lines) and (j - i) < 4:
+                nxt = heading_lines[j]
+                nxt_size_key = round(nxt["max_size"] * 2) / 2
+
                 if nxt["page_num"] != current["page_num"]:
                     break
-                if abs(nxt["size"] - current["size"]) / max(nxt["size"], current["size"]) >= 0.05:
+                if nxt_size_key != cur_size_key:
                     break
-                nxt_y = nxt.get("bbox_y", 0)
-                delta_y = nxt_y - last_y
-                # Must be a downward line continuation (10–60px gap)
-                # Not a duplicate shadow (delta_y < 5) or unrelated block (> 60px)
-                if not (5 < delta_y <= 60):
+
+                delta_y = nxt["bbox_y"] - last_y
+                if not (5 < delta_y <= 80):
                     break
-                if j - i >= 3:
-                    break
+
                 combined_text = combined_text.rstrip() + " " + nxt["text"].lstrip()
-                last_y = nxt_y
+                last_y = nxt["bbox_y"]
                 j += 1
-            merged_spans.append({
+
+            merged_heading_lines.append({
                 "text": combined_text.strip(),
-                "size": current["size"],
+                "max_size": current["max_size"],
+                "dominant_size": current["dominant_size"],
                 "page_num": current["page_num"],
-                "bbox_y": current.get("bbox_y", 0)
+                "bbox_y": current["bbox_y"],
             })
             i = j
 
-        filtered_spans = merged_spans
+        # ----------------------------------------------------------------
+        # Pass 6b: Associate chapter numbers
+        # ----------------------------------------------------------------
+        for line in merged_heading_lines:
+            size_key = round(line["max_size"] * 2) / 2
+            if size_key not in heading_size_to_level:
+                continue
+            if heading_size_to_level[size_key] != 1:
+                continue
+            page_num = line["page_num"]
+            if page_num in chapter_number_map:
+                num = chapter_number_map[page_num]
+                if not line["text"].startswith(f"Chapter {num}"):
+                    line["text"] = f"Chapter {num}: {line['text']}"
 
-        size_pages = defaultdict(set)
-        for span in filtered_spans:
-            size_pages[span["size"]].add(span["page_num"])
-            
-        body_text_sizes = set()
-        for size, pages in size_pages.items():
-            if len(pages) > total_pages * 0.6:
-                body_text_sizes.add(size)
-                
-        print(f"extract_headings: body text sizes excluded: {body_text_sizes}")
-        
-        unique_sizes = set(span["size"] for span in filtered_spans if span["size"] not in body_text_sizes)
-        sorted_sizes = sorted(unique_sizes, reverse=True)
-        
-        clusters = []
-        for size in sorted_sizes:
-            if not clusters:
-                clusters.append(size)
-            else:
-                added = False
-                for c_size in clusters:
-                    if abs(c_size - size) / max(c_size, size) < 0.05:
-                        added = True
-                        break
-                if not added:
-                    clusters.append(size)
-                    
-        top_clusters = clusters[:3]
-        
-        heading_sizes_dict = {}
-        for idx, c_size in enumerate(top_clusters):
-            heading_sizes_dict[c_size] = idx + 1
-            
-        print(f"extract_headings: heading sizes selected: {heading_sizes_dict}")
-        
-        if not top_clusters:
-            return ([], True)
-            
-        flat_list = []
-        last_title = None
-        last_page = None
-        
-        for span in filtered_spans:
-            size = span["size"]
+        # ----------------------------------------------------------------
+        # Pass 7: Deduplicate and flatten
+        # ----------------------------------------------------------------
+        flat_list: list[list] = []
+        seen: set[tuple] = set()
+
+        for line in merged_heading_lines:
+            size_key = round(line["max_size"] * 2) / 2
             level = None
-            
-            for c_size, lvl in heading_sizes_dict.items():
-                if abs(c_size - size) / max(c_size, size) < 0.05:
+            for c_size, lvl in heading_size_to_level.items():
+                if abs(c_size - size_key) / max(c_size, size_key) < 0.10:
                     level = lvl
                     break
+            if level is None:
+                continue
+
+            key = (line["text"], line["page_num"])
+            if key in seen:
+                continue
+            seen.add(key)
+
+            flat_list.append([level, line["text"], line["page_num"]])
+
+        if not flat_list:
+            return ([], True)
+
+        def normalize_title(t: str) -> str:
+            # Strip chapter prefix for comparison so "Chapter 14: X" vs "Chapter 14: Y"
+            # compares only X vs Y
+            t = re.sub(r'^chapter\s+\d+[:\s]+', '', t.strip().lower())
+            # Remove all non-alphanumeric so glyph artifacts don't prevent matching:
+            # "specialpurposeintegratedcircuits" == "specialpurposeintegratedcircuits"
+            return re.sub(r'[^a-z0-9]', '', t)
+
+        def has_glyph_artifact(text: str) -> bool:
+            # Detects mid-word uppercase not at a word boundary:
+            # "Special-purpoSe" -> 'o'+'S'+'e' matches [a-z][A-Z][a-z]
+            # "Special-Purpose" -> 'e'+'-'+'P' does NOT match (hyphen breaks it)
+            # "MMBF5484" -> all caps, no [a-z] before [A-Z], does NOT match
+            return bool(re.search(r'[a-z][A-Z][a-z]', text))
+
+        deduped: list[list] = []
+        for entry in flat_list:
+            level, title, page = entry
+            norm = normalize_title(title)
+            
+            conflict_idx = None
+            for idx, e in enumerate(deduped):
+                if normalize_title(e[1]) == norm and abs(e[2] - page) <= 15:
+                    conflict_idx = idx
+                    break
                     
-            if level is not None:
-                if last_title == span["text"] and last_page == span["page_num"]:
-                    continue
-                flat_list.append([level, span["text"], span["page_num"]])
-                last_title = span["text"]
-                last_page = span["page_num"]
-                
-        print(f"extract_headings: {len(flat_list)} headings detected")
-        
+            if conflict_idx is None:
+                deduped.append(entry)
+            else:
+                existing = deduped[conflict_idx]
+                if has_glyph_artifact(existing[1]) and not has_glyph_artifact(title):
+                    deduped[conflict_idx] = entry
+                # else: keep existing (it was seen first and is not worse)
+        flat_list = deduped
+
         tree = self._build_tree(flat_list)
         return (tree, True)
 

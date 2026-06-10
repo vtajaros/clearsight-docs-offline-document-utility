@@ -38,19 +38,20 @@ def _make_text_pdf(tmp_path: Path, name: str = "text.pdf") -> Path:
     """Create a PDF with text at 3 distinct heading sizes plus body text.
 
     Structure:
-      Page 1:  "Chapter One"       at 24pt  (H1 candidate)
-      Page 2:  "Section Overview"  at 18pt  (H2 candidate)
-      Page 3:  "Subsection Detail" at 12pt  (H3 candidate)
-      Pages 4-10: body text        at 10pt  (7/10 pages = 70% frequency,
-                                             exceeds 60% threshold,
+      Page 1-2: Front cover (empty)
+      Page 3:  "Chapter One"       at 24pt  (H1 candidate)
+      Page 4:  "Section Overview"  at 18pt  (H2 candidate)
+      Page 5:  "Subsection Detail" at 12pt  (H3 candidate)
+      Pages 6-10: body text        at 10pt  (exceeds threshold,
                                              must be excluded as body text)
-
-    Uses fitz.insert_textbox with explicit fontsize. Rect is intentionally
-    large (50,50,550,200) to guarantee text fits and is not clipped.
-    insert_textbox returns negative float if text is clipped — assert > 0.
+      Page 11-12: Back cover (empty)
     """
     import fitz
     doc = fitz.open()
+
+    # Front cover
+    doc.new_page(width=612, height=792)
+    doc.new_page(width=612, height=792)
 
     heading_pages = [
         (24.0, "Chapter One"),
@@ -67,7 +68,7 @@ def _make_text_pdf(tmp_path: Path, name: str = "text.pdf") -> Path:
         )
         assert rc > 0, f"Text '{text}' was clipped in fixture — increase rect"
 
-    for i in range(7):
+    for i in range(5):
         page = doc.new_page(width=612, height=792)
         rc = page.insert_textbox(
             fitz.Rect(50, 50, 550, 700),
@@ -77,24 +78,29 @@ def _make_text_pdf(tmp_path: Path, name: str = "text.pdf") -> Path:
         )
         assert rc > 0, "Body text was clipped in fixture — increase rect"
 
+    # Back cover
+    doc.new_page(width=612, height=792)
+    doc.new_page(width=612, height=792)
+
     out = tmp_path / name
     doc.save(str(out))
     doc.close()
     return out
 
+
 def _make_running_header_pdf(tmp_path: Path, name: str = "running.pdf") -> Path:
-    """PDF where 'Chapter 1' at 24pt appears on pages 1, 2, 3.
-    'Introduction' at 18pt appears only on page 1.
+    """PDF where 'Chapter 1' at 24pt appears on pages 3, 4, 5.
+    'Introduction' at 18pt appears only on page 3.
     'Chapter 1' on the same page appears twice in the raw spans
     (to test same-title-same-page deduplication).
     """
     import fitz
     doc = fitz.open()
-    for i in range(6):
+    for i in range(8):
         page = doc.new_page(width=612, height=792)
 
-        if 0 < i < 4:
-            # Running header — same title, different pages (on pages 2, 3, 4)
+        if 1 < i < 5:
+            # Running header — same title, different pages (on pages 3, 4, 5)
             rc = page.insert_textbox(
                 fitz.Rect(50, 50, 550, 100),
                 "Chapter 1",
@@ -103,19 +109,19 @@ def _make_running_header_pdf(tmp_path: Path, name: str = "running.pdf") -> Path:
             )
             assert rc > 0
             
-        # Insert dummy spans to exceed the 20-span heuristic threshold
-        # Using size 10.0 on all 6 pages classifies it as body text, preventing
+        # Insert dummy spans to exceed the 10-line heuristic threshold
+        # Using size 10.0 classifies it as body text, preventing
         # it from being a heading while successfully breaking consecutive spans
         page.insert_textbox(
             fitz.Rect(50, 300, 550, 450),
-            "Dummy line.\n" * 10,
+            "Dummy line 1.\nDummy line 2.\nDummy line 3.\n",
             fontsize=10.0,
             fontname="helv"
         )
 
-        if i == 1:
-            # Second "Chapter 1" block on page 2 — same title, same page
-            # This should be deduped to one entry for page 2
+        if i == 2:
+            # Second "Chapter 1" block on page 3 — same title, same page
+            # This should be deduped to one entry for page 3
             rc2 = page.insert_textbox(
                 fitz.Rect(50, 500, 550, 550),
                 "Chapter 1",
@@ -123,7 +129,7 @@ def _make_running_header_pdf(tmp_path: Path, name: str = "running.pdf") -> Path:
                 fontname="helv",
             )
             assert rc2 > 0
-            # Unique heading only on page 2
+            # Unique heading only on page 3
             rc3 = page.insert_textbox(
                 fitz.Rect(50, 600, 550, 650),
                 "Introduction",
@@ -356,10 +362,9 @@ class TestExtractHeadings:
             f"Duplicate entries found: {entries}"
         )
 
-    def test_same_title_different_pages_preserved(self, svc,
-                                                   running_header_pdf):
-        """'Chapter 1' on pages 1, 2, 3 are different entries —
-        only same-page duplicates are removed."""
+    def test_same_title_different_pages_deduplicated(self, svc,
+                                                     running_header_pdf):
+        """'Chapter 1' on nearby pages (within 15 pages) is deduplicated."""
         nodes, _ = svc.extract_headings(str(running_header_pdf))
 
         def collect_all(nodelist):
@@ -372,7 +377,7 @@ class TestExtractHeadings:
         entries = collect_all(nodes)
         chapter_pages = [p for t, p in entries if t == "Chapter 1"]
         print("DEBUG ENTRIES:", entries)
-        # Should appear on 3 distinct pages
-        assert len(set(chapter_pages)) == 3, (
-            f"Expected Chapter 1 on 3 pages, got pages: {chapter_pages}"
+        # Should appear on only 1 page because they are within 15 pages and deduplicated
+        assert len(set(chapter_pages)) == 1, (
+            f"Expected Chapter 1 on 1 page, got pages: {chapter_pages}"
         )

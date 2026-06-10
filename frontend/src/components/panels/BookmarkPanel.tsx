@@ -3,6 +3,8 @@ import type { DragEvent } from 'react'
 import { type CompletionModal, type ElectronFile, type BookmarkNode, formatBytes, pickFiles } from '../../types'
 import { BookmarkTreeNode } from '../BookmarkTreeNode'
 import { BookmarkEditor } from '../BookmarkEditor'
+import { useSimulatedProgress } from '../../hooks/useSimulatedProgress'
+import { ProgressBar } from '../ProgressBar'
 
 interface BookmarkPanelProps {
   base: string
@@ -22,6 +24,7 @@ export function BookmarkPanel({ base, loading, setLoading, setError, setModal, s
   const [editingBookmarks, setEditingBookmarks] = useState<BookmarkNode[]>([])
   const [needsOcr, setNeedsOcr] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const { progress, label: progressLabel, start: startProgress, finish: finishProgress, cancel: cancelProgress } = useSimulatedProgress()
 
   useEffect(() => {
     if (saveStatus === 'saved') {
@@ -80,18 +83,29 @@ export function BookmarkPanel({ base, loading, setLoading, setError, setModal, s
     if (!file || !('isElectron' in file) || !file.path) return
     setMode('generating')
     setNeedsOcr(false)
+    startProgress([
+      { target: 15, label: 'Opening PDF...', delayMs: 0 },
+      { target: 35, label: 'Scanning page structure...', delayMs: 800 },
+      { target: 60, label: 'Detecting headings...', delayMs: 2200 },
+      { target: 80, label: 'Clustering font sizes...', delayMs: 4000 },
+      { target: 92, label: 'Building table of contents...', delayMs: 6000 },
+    ])
     try {
       const result = await window.electronAPI!.bookmarks.extract({
         path: file.path
       })
+      finishProgress()
       if (result.needs_ocr) {
         setNeedsOcr(true)
         setMode('view')
+        cancelProgress()
         return
       }
       setEditingBookmarks(result.bookmarks)
-      setMode('editing')
+      // Brief pause so user sees 100% before switching to editor
+      setTimeout(() => setMode('editing'), 400)
     } catch (err: any) {
+      cancelProgress()
       setError(err.message || 'Failed to generate bookmarks.')
       setMode('view')
     }
@@ -170,12 +184,17 @@ export function BookmarkPanel({ base, loading, setLoading, setError, setModal, s
 
     if (mode === 'generating') {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <svg className="w-8 h-8 text-violet-500 animate-spin mb-4" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <span className="text-sm text-zinc-400">Analyzing PDF structure...</span>
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 max-w-sm mx-auto w-full">
+          <div className="flex flex-col items-center gap-3">
+            <svg className="w-8 h-8 text-violet-500 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-sm text-zinc-400">Analyzing PDF structure...</span>
+          </div>
+          <div className="w-full">
+            <ProgressBar loading={true} progress={progress} label={progressLabel} />
+          </div>
         </div>
       )
     }
@@ -205,9 +224,13 @@ export function BookmarkPanel({ base, loading, setLoading, setError, setModal, s
           <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
             This PDF has no table of contents. Click Generate Bookmarks to create one automatically based on heading detection.
           </p>
-          <button disabled className="px-5 py-2.5 bg-violet-500 text-white rounded-xl text-sm font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
-            Generate Bookmarks
-          </button>
+                <button
+                  onClick={handleGenerate}
+                  disabled={!(file && 'isElectron' in file && file.path && mode === 'view' && fetchStatus === 'idle')}
+                  className="px-5 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl text-sm font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Generate Bookmarks
+                </button>
         </div>
       )
     }
