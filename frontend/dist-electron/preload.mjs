@@ -10,6 +10,11 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
 		minimize: () => electron.ipcRenderer.invoke("titlebar:minimize"),
 		maximize: () => electron.ipcRenderer.invoke("titlebar:maximize"),
 		close: () => electron.ipcRenderer.invoke("titlebar:close")
+	},
+	bookmarks: {
+		read: (args) => electron.ipcRenderer.invoke("bookmarks:read", args),
+		write: (args) => electron.ipcRenderer.invoke("bookmarks:write", args),
+		extract: (args) => electron.ipcRenderer.invoke("bookmarks:extract", args)
 	}
 });
 //#endregion

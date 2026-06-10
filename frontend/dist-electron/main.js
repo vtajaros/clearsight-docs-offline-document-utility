@@ -158,6 +158,73 @@ app.whenReady().then(async () => {
 		else mainWindow?.maximize();
 	});
 	ipcMain.handle("titlebar:close", () => mainWindow?.close());
+	ipcMain.handle("bookmarks:read", async (_event, { path }) => {
+		const url = `http://127.0.0.1:${port}/bookmarks/read?path=${encodeURIComponent(path)}`;
+		const res = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } });
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err.detail || `bookmarks:read failed: ${res.status}`);
+		}
+		return res.json();
+	});
+	ipcMain.handle("bookmarks:write", async (_event, { sourcePath, overwrite, bookmarks }) => {
+		const tmpOutputPath = path.join(app.getPath("temp"), `clearsight_bm_${Date.now()}_${path.basename(sourcePath)}`);
+		const res = await fetch(`http://127.0.0.1:${port}/bookmarks/write`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${apiToken}`
+			},
+			body: JSON.stringify({
+				source_path: sourcePath,
+				output_path: tmpOutputPath,
+				bookmarks
+			})
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err.detail || `bookmarks:write failed: ${res.status}`);
+		}
+		const arrayBuffer = await res.arrayBuffer();
+		const buffer = Buffer.from(arrayBuffer);
+		await fs.promises.writeFile(tmpOutputPath, buffer);
+		if (overwrite) {
+			try {
+				await fs.promises.rename(tmpOutputPath, sourcePath);
+			} catch (err) {
+				if (err.code === "EXDEV") {
+					await fs.promises.copyFile(tmpOutputPath, sourcePath);
+					await fs.promises.unlink(tmpOutputPath).catch(() => {});
+				} else throw err;
+			}
+			allowedReadPaths.add(sourcePath);
+			return {
+				success: true,
+				outputPath: sourcePath
+			};
+		} else {
+			allowedReadPaths.add(tmpOutputPath);
+			return {
+				success: true,
+				outputPath: tmpOutputPath
+			};
+		}
+	});
+	ipcMain.handle("bookmarks:extract", async (_event, { path: pdfPath }) => {
+		const res = await fetch(`http://127.0.0.1:${port}/bookmarks/extract`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${apiToken}`
+			},
+			body: JSON.stringify({ path: pdfPath })
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({}));
+			throw new Error(err.detail || `bookmarks:extract failed: ${res.status}`);
+		}
+		return res.json();
+	});
 	if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
 	else mainWindow.loadFile("dist/index.html");
 });

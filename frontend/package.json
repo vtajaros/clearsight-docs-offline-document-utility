@@ -6,12 +6,16 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
+    "electron": "electron .",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "lucide-react": "^0.383.0",
     "pdfjs-dist": "^5.7.284",
     "react": "^19.2.6",
@@ -39,6 +43,7 @@
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
     "vite-plugin-electron": "^0.29.1",
+    "vite-plugin-electron-renderer": "^1.0.0",
     "vitest": "^4.1.7"
   }
 }

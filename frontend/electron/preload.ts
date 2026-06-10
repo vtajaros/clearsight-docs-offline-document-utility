@@ -26,4 +26,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         maximize: () => ipcRenderer.invoke('titlebar:maximize'),
         close:    () => ipcRenderer.invoke('titlebar:close'),
     },
+
+    bookmarks: {
+        read: (args: { path: string }) =>
+            ipcRenderer.invoke('bookmarks:read', args),
+        write: (args: { sourcePath: string; overwrite: boolean; bookmarks: unknown[] }) =>
+            ipcRenderer.invoke('bookmarks:write', args),
+        extract: (args: { path: string }) =>
+            ipcRenderer.invoke('bookmarks:extract', args),
+    },
 })

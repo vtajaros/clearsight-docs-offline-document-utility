@@ -16,6 +16,7 @@ ClearSight Docs is a privacy-first, fully local desktop application for PDF docu
 * **Delete Pages**: Selectively remove pages using an interactive thumbnail grid and high-resolution previews.
 * **Compress PDF**: Reduce file sizes with Low, Medium, and High optimization presets utilizing intelligent image recompression and stream optimizations.
 * **OCR PDF**: Convert scanned documents or images into selectable Plain Text (`.txt`) or fully Searchable PDFs using the powerful Tesseract OCR engine.
+* **PDF Bookmarks**: View, automatically generate (via heuristic font-size analysis), edit, and natively reorder the hierarchical table of contents for any PDF document.
 * **Format Conversion**: 
   * **PDF to Images**: Extract pages into high-quality PNG or JPEG archives.
   * **Image to PDF**: Combine multiple image formats into a unified PDF document with customizable page sizes, margins, and orientations.

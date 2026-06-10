@@ -1,7 +1,7 @@
 // frontend/src/types.ts
 // Shared types, utilities, and constants used across all panel components.
 
-export type ActiveTab = 'ocr' | 'merge' | 'split' | 'compress' | 'pdf-to-images' | 'image-to-pdf' | 'delete-pages'
+export type ActiveTab = 'ocr' | 'merge' | 'split' | 'compress' | 'pdf-to-images' | 'image-to-pdf' | 'delete-pages' | 'bookmarks'
 export type OcrLanguage = 'eng' | 'fil' | 'jpn' | 'chi_sim'
 export type OcrFormat = 'txt' | 'pdf'
 export type OcrAccuracy = 'fast' | 'balanced' | 'accurate'
@@ -12,6 +12,13 @@ export type CompletionModal = {
   title: string
   subtitle: string
   onExport: () => void
+}
+
+export interface BookmarkNode {
+  title: string
+  page: number
+  level: number
+  children: BookmarkNode[]
 }
 
 export type OcrProgress = {
@@ -45,6 +52,23 @@ declare global {
         minimize(): Promise<void>
         maximize(): Promise<void>
         close(): Promise<void>
+      }
+      bookmarks: {
+        read: (args: { path: string }) => Promise<{
+          bookmarks: BookmarkNode[]
+          page_count: number
+        }>
+        write: (args: {
+          sourcePath: string
+          overwrite: boolean
+          bookmarks: BookmarkNode[]
+        }) => Promise<{ success: boolean; outputPath: string }>
+        extract: (args: { path: string }) => Promise<{
+          bookmarks: BookmarkNode[]
+          is_generated: boolean
+          needs_ocr: boolean
+          page_count: number
+        }>
       }
     };
   }

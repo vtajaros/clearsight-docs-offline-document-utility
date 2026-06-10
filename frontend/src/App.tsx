@@ -9,6 +9,7 @@ import { CompressPanel } from './components/panels/CompressPanel'
 import { PdfToImagesPanel } from './components/panels/PdfToImagesPanel'
 import { ImageToPdfPanel } from './components/panels/ImageToPdfPanel'
 import { DeletePagesPanel } from './components/panels/DeletePagesPanel'
+import { BookmarkPanel } from './components/panels/BookmarkPanel'
 import { NavigationConfirmModal } from './components/NavigationConfirmModal'
 import { useNavigationGuard } from './hooks/useNavigationGuard'
 import type {
@@ -224,6 +225,22 @@ export default function App() {
               </svg>
               {!sidebarCollapsed && 'OCR PDF'}
             </button>
+ 
+            {/* Bookmarks */}
+            <button
+              onClick={() => handleTabChange('bookmarks')}
+              title="Bookmarks"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'bookmarks'
+                  ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent'
+              }`}
+            >
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z" />
+              </svg>
+              {!sidebarCollapsed && 'Bookmarks'}
+            </button>
           </nav>
         </div>
  
@@ -246,6 +263,7 @@ export default function App() {
               {activeTab === 'compress' && 'Compress PDF Document'}
               {activeTab === 'pdf-to-images' && 'Convert PDF to Images'}
               {activeTab === 'image-to-pdf' && 'Convert Images to PDF'}
+              {activeTab === 'bookmarks' && 'PDF Bookmarks'}
             </h1>
             <p className="text-sm text-zinc-400 mt-1">
               {activeTab === 'ocr' && 'Convert non-searchable or scanned PDF documents into clean selectable text or searchable PDFs.'}
@@ -255,6 +273,7 @@ export default function App() {
               {activeTab === 'compress' && 'Reduce the file size of your PDF document without significantly losing quality.'}
               {activeTab === 'pdf-to-images' && 'Extract pages from a PDF and convert them into a ZIP archive of high-quality images.'}
               {activeTab === 'image-to-pdf' && 'Combine multiple images (JPG/PNG) into a single unified PDF document.'}
+              {activeTab === 'bookmarks' && 'View, generate, and edit the table of contents for any PDF.'}
             </p>
           </div>
  
@@ -355,6 +374,17 @@ export default function App() {
  
           {activeTab === 'image-to-pdf' && (
             <ImageToPdfPanel
+              base={base}
+              loading={loading}
+              setLoading={setLoading}
+              setError={setError}
+              setModal={setModal}
+              setHasUnsavedChanges={setHasUnsavedChanges}
+            />
+          )}
+
+          {activeTab === 'bookmarks' && (
+            <BookmarkPanel
               base={base}
               loading={loading}
               setLoading={setLoading}

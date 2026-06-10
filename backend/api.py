@@ -34,12 +34,14 @@ from services.pdf_compress_service import PdfCompressService
 from services.pdf_to_images_service import PdfToImagesService
 from services.image_to_pdf_service import ImageToPdfService
 from services.pdf_delete_service import PdfDeleteService
+from routers.bookmarks import router as bookmarks_router
 
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="ClearSight Docs API", version="2.0.0")
+app.include_router(bookmarks_router, prefix="/bookmarks", tags=["bookmarks"])
 
 import secrets
 API_TOKEN = os.environ.get("CLEARSIGHT_API_TOKEN")
