@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import type { OcrProgress } from '../types'
 
-export function useOcrWebSocket(port: number | null, jobId: string | null) {
+/**
+ * Generalized WebSocket progress hook for any job-based backend operation.
+ * @param port  - The backend port number (null if not yet resolved)
+ * @param jobId - The UUID for the current job (null to disconnect)
+ * @param wsPath - WebSocket path prefix, e.g. '/ws/ocr' or '/ws/bionic' (no trailing slash)
+ */
+export function useJobWebSocket(port: number | null, jobId: string | null, wsPath: string) {
   const [progress, setProgress] = useState<OcrProgress | null>(null)
   const [isConnected, setIsConnected] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,7 +28,7 @@ export function useOcrWebSocket(port: number | null, jobId: string | null) {
       return
     }
 
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/ocr/${jobId}`)
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${wsPath}/${jobId}`)
     wsRef.current = ws
     setIsConnected(true)
     setError(null)
@@ -58,7 +64,7 @@ export function useOcrWebSocket(port: number | null, jobId: string | null) {
         ws.close()
       }
     }
-  }, [port, jobId])
+  }, [port, jobId, wsPath])
 
   return { progress, isConnected, error, disconnect }
 }

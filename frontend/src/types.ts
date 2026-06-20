@@ -1,7 +1,7 @@
 // frontend/src/types.ts
 // Shared types, utilities, and constants used across all panel components.
 
-export type ActiveTab = 'ocr' | 'merge' | 'split' | 'compress' | 'pdf-to-images' | 'image-to-pdf' | 'delete-pages' | 'bookmarks'
+export type ActiveTab = 'ocr' | 'merge' | 'split' | 'compress' | 'pdf-to-images' | 'image-to-pdf' | 'delete-pages' | 'bookmarks' | 'bionic'
 export type OcrLanguage = 'eng' | 'fil' | 'jpn' | 'chi_sim'
 export type OcrFormat = 'txt' | 'pdf'
 export type OcrAccuracy = 'fast' | 'balanced' | 'accurate'

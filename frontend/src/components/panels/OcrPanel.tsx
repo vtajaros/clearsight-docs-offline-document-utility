@@ -5,7 +5,7 @@ import {
   type OcrLanguage, type OcrFormat, type OcrAccuracy,
   type CompletionModal, formatBytes, pickFiles,
 } from '../../types'
-import { useOcrWebSocket } from '../../hooks/useOcrWebSocket'
+import { useJobWebSocket } from '../../hooks/useJobWebSocket'
 
 interface OcrPanelProps {
   base: string
@@ -37,7 +37,7 @@ export function OcrPanel({
   ocrCopied, setOcrCopied, port, setHasUnsavedChanges
 }: OcrPanelProps) {
   const [jobId, setJobId] = useState<string | null>(null)
-  const { progress, error: wsError } = useOcrWebSocket(port, jobId)
+  const { progress, error: wsError } = useJobWebSocket(port, jobId, '/ws/ocr')
 
   useEffect(() => {
     if (wsError) {

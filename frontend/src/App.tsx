@@ -10,6 +10,7 @@ import { PdfToImagesPanel } from './components/panels/PdfToImagesPanel'
 import { ImageToPdfPanel } from './components/panels/ImageToPdfPanel'
 import { DeletePagesPanel } from './components/panels/DeletePagesPanel'
 import { BookmarkPanel } from './components/panels/BookmarkPanel'
+import { BionicPanel } from './components/panels/BionicPanel'
 import { NavigationConfirmModal } from './components/NavigationConfirmModal'
 import { useNavigationGuard } from './hooks/useNavigationGuard'
 import type {
@@ -241,6 +242,20 @@ export default function App() {
               </svg>
               {!sidebarCollapsed && 'Bookmarks'}
             </button>
+ 
+            {/* Bionic Reading */}
+            <button
+              onClick={() => handleTabChange('bionic')}
+              title="Bionic Reading"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'bionic'
+                  ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent'
+              }`}
+            >
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
+              {!sidebarCollapsed && 'Bionic Reading'}
+            </button>
           </nav>
         </div>
  
@@ -264,6 +279,7 @@ export default function App() {
               {activeTab === 'pdf-to-images' && 'Convert PDF to Images'}
               {activeTab === 'image-to-pdf' && 'Convert Images to PDF'}
               {activeTab === 'bookmarks' && 'PDF Bookmarks'}
+              {activeTab === 'bionic' && 'Bionic Reading Converter'}
             </h1>
             <p className="text-sm text-zinc-400 mt-1">
               {activeTab === 'ocr' && 'Convert non-searchable or scanned PDF documents into clean selectable text or searchable PDFs.'}
@@ -274,6 +290,7 @@ export default function App() {
               {activeTab === 'pdf-to-images' && 'Extract pages from a PDF and convert them into a ZIP archive of high-quality images.'}
               {activeTab === 'image-to-pdf' && 'Combine multiple images (JPG/PNG) into a single unified PDF document.'}
               {activeTab === 'bookmarks' && 'View, generate, and edit the table of contents for any PDF.'}
+              {activeTab === 'bionic' && 'Convert a PDF into a bionic-formatted HTML file to improve reading speed and focus.'}
             </p>
           </div>
  
@@ -390,6 +407,18 @@ export default function App() {
               setLoading={setLoading}
               setError={setError}
               setModal={setModal}
+              setHasUnsavedChanges={setHasUnsavedChanges}
+            />
+          )}
+
+          {activeTab === 'bionic' && (
+            <BionicPanel
+              base={base}
+              loading={loading}
+              setLoading={setLoading}
+              setError={setError}
+              setModal={setModal}
+              port={port}
               setHasUnsavedChanges={setHasUnsavedChanges}
             />
           )}

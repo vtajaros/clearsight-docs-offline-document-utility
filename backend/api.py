@@ -17,6 +17,7 @@ import shutil
 import tempfile
 import json
 import zipfile
+import fitz
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated
@@ -34,6 +35,7 @@ from services.pdf_compress_service import PdfCompressService
 from services.pdf_to_images_service import PdfToImagesService
 from services.image_to_pdf_service import ImageToPdfService
 from services.pdf_delete_service import PdfDeleteService
+from services.bionic_service import BionicService
 from routers.bookmarks import router as bookmarks_router
 
 # ---------------------------------------------------------------------------
@@ -70,6 +72,7 @@ _compress      = PdfCompressService()
 _pdf_to_images = PdfToImagesService()
 _image_to_pdf  = ImageToPdfService()
 _delete_pages  = PdfDeleteService()
+_bionic        = BionicService()
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
@@ -280,6 +283,20 @@ async def ocr_websocket(websocket: WebSocket, job_id: str):
         _ws_manager.disconnect(job_id)
 
 
+@app.websocket("/ws/bionic/{job_id}")
+async def bionic_websocket(websocket: WebSocket, job_id: str):
+    await _ws_manager.connect(job_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        _ws_manager.disconnect(job_id)
+
+
 @app.post("/api/ocr")
 async def ocr_pdf(
     input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
@@ -358,6 +375,87 @@ async def ocr_pdf(
             path=str(output_path),
             media_type=media,
             filename=f"{stem}_ocr.{output_ext}",
+            temp_dir=tmp,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Bionic  —  POST /api/bionic
+# ---------------------------------------------------------------------------
+
+@app.post("/api/bionic")
+async def bionic_convert(
+    input_data: Annotated[tuple[Path, Path], Depends(resolve_single_input)],
+    bold_ratio: Annotated[float, Form()] = 0.5,
+    job_id: Annotated[str, Form()] = "",
+    _=Depends(verify_token),
+):
+    input_path, tmp = input_data
+    if not input_path.name.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF.")
+    
+    if not (0.1 <= bold_ratio <= 0.9):
+        raise HTTPException(status_code=400, detail="bold_ratio must be between 0.1 and 0.9.")
+        
+    stem = input_path.stem
+
+    with _managed_tmp(tmp):
+        output_path = tmp / "bionic_output.html"
+        loop = asyncio.get_running_loop()
+        
+        try:
+            doc = fitz.open(str(input_path))
+            page_count = len(doc)
+            doc.close()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Failed to read PDF file.")
+            
+        timeout = max(60, page_count * 2)
+
+        async def broadcast(current: int, total: int, message: str):
+            await _ws_manager.send(job_id, {
+                "current": current,
+                "total": total,
+                "message": message
+            })
+
+        def sync_callback(current: int, total: int, message: str):
+            if not job_id:
+                return
+            if not _ws_manager.is_connected(job_id):
+                return
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    broadcast(current, total, message), loop
+                )
+                future.result(timeout=1)
+            except Exception:
+                pass
+
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    _executor,
+                    lambda: _bionic.convert_to_bionic_html(
+                        str(input_path), str(output_path), bold_ratio, sync_callback
+                    )
+                ),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Bionic processing timed out. The document may be too large or complex.")
+
+        if job_id:
+            await _ws_manager.send(job_id, {"current": -1, "total": -1, "message": "done"})
+            _ws_manager.disconnect(job_id)
+
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result.get("error_message", "Unknown error"))
+
+        return CleanupFileResponse(
+            path=str(output_path),
+            media_type="text/html",
+            filename=f"{stem}_bionic.html",
             temp_dir=tmp,
         )
 
