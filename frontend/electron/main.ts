@@ -32,9 +32,14 @@ async function startBackend(port: number): Promise<void> {
     const isDev = !!process.env.VITE_DEV_SERVER_URL
     const backendBase = path.join(app.getAppPath(), '..', 'backend')
 
+    const isWin = process.platform === 'win32'
+    const venvBinDir = isWin ? 'Scripts' : 'bin'
+    const uvicornExec = isWin ? 'uvicorn.exe' : 'uvicorn'
+    const backendExec = isWin ? 'backend.exe' : 'backend'
+
     const backendExecutable = isDev
-        ? path.join(backendBase, '.venv', 'Scripts', 'uvicorn.exe')
-        : path.join(process.resourcesPath, 'backend', 'backend.exe')
+        ? path.join(backendBase, '.venv', venvBinDir, uvicornExec)
+        : path.join(process.resourcesPath, 'backend', backendExec)
 
     const args = isDev
         ? ['api:app', '--port', String(port), '--host', '127.0.0.1']
@@ -155,20 +160,30 @@ app.whenReady().then(async () => {
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
+        minWidth: 800,
+        minHeight: 500,
         frame: false,
+        transparent: process.platform === 'linux',
         titleBarStyle: 'hidden',
         icon: path.join(app.getAppPath(), '..', 'icon.png'),
         autoHideMenuBar: true,
-        thickFrame: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.mjs'),
             contextIsolation: true,
             nodeIntegration: false,
         },
     })
-    mainWindow.maximize()  // add this line
+    mainWindow.maximize()
+
+    mainWindow.on('maximize', () => {
+        mainWindow?.webContents.send('window-maximized', true)
+    })
+    mainWindow.on('unmaximize', () => {
+        mainWindow?.webContents.send('window-maximized', false)
+    })
 
     ipcMain.handle('titlebar:minimize', () => mainWindow?.minimize())
+    ipcMain.handle('titlebar:isMaximized', () => mainWindow?.isMaximized() ?? false)
     ipcMain.handle('titlebar:maximize', () => {
         if (mainWindow?.isMaximized()) mainWindow.restore()
         else mainWindow?.maximize()

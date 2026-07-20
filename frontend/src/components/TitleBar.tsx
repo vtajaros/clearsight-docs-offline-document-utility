@@ -1,14 +1,27 @@
-// frontend/src/components/TitleBar.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Minus, Square, Copy, X } from 'lucide-react'
 
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(true)
 
+  useEffect(() => {
+    window.electronAPI?.titlebar.isMaximized().then(setIsMaximized)
+    const cleanup = window.electronAPI?.titlebar.onMaximizedChange(setIsMaximized)
+    return () => {
+      cleanup?.()
+    }
+  }, [])
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.titlebar-controls')) return
+    window.electronAPI?.titlebar.maximize()
+  }
+
   return (
     <div
       className="titlebar"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      onDoubleClick={handleDoubleClick}
     >
       <div className="titlebar-spacer" />
 
@@ -28,7 +41,7 @@ export function TitleBar() {
           <Minus size={14} strokeWidth={1.5} />
         </button>
         <button
-          onClick={() => { window.electronAPI?.titlebar.maximize(); setIsMaximized(p => !p) }}
+          onClick={() => window.electronAPI?.titlebar.maximize()}
           title={isMaximized ? 'Restore' : 'Maximize'}
         >
           {isMaximized ? <Copy size={13} strokeWidth={1.5} /> : <Square size={13} strokeWidth={1.5} />}

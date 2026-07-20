@@ -52,6 +52,8 @@ declare global {
         minimize(): Promise<void>
         maximize(): Promise<void>
         close(): Promise<void>
+        isMaximized(): Promise<boolean>
+        onMaximizedChange(callback: (isMaximized: boolean) => void): () => void
       }
       bookmarks: {
         read: (args: { path: string }) => Promise<{

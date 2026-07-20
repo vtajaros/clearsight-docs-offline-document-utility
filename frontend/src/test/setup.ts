@@ -16,5 +16,7 @@ globalThis.window.electronAPI = {
     minimize: vi.fn(),
     maximize: vi.fn(),
     close: vi.fn(),
+    isMaximized: vi.fn().mockResolvedValue(true),
+    onMaximizedChange: vi.fn().mockReturnValue(() => {}),
   },
 }

@@ -25,6 +25,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         minimize: () => ipcRenderer.invoke('titlebar:minimize'),
         maximize: () => ipcRenderer.invoke('titlebar:maximize'),
         close:    () => ipcRenderer.invoke('titlebar:close'),
+        isMaximized: (): Promise<boolean> => ipcRenderer.invoke('titlebar:isMaximized'),
+        onMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+            const listener = (_event: unknown, state: boolean) => callback(state)
+            ipcRenderer.on('window-maximized', listener)
+            return () => {
+                ipcRenderer.removeListener('window-maximized', listener)
+            }
+        },
     },
 
     bookmarks: {

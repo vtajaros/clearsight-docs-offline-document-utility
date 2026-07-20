@@ -9,7 +9,15 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
 	titlebar: {
 		minimize: () => electron.ipcRenderer.invoke("titlebar:minimize"),
 		maximize: () => electron.ipcRenderer.invoke("titlebar:maximize"),
-		close: () => electron.ipcRenderer.invoke("titlebar:close")
+		close: () => electron.ipcRenderer.invoke("titlebar:close"),
+		isMaximized: () => electron.ipcRenderer.invoke("titlebar:isMaximized"),
+		onMaximizedChange: (callback) => {
+			const listener = (_event, state) => callback(state);
+			electron.ipcRenderer.on("window-maximized", listener);
+			return () => {
+				electron.ipcRenderer.removeListener("window-maximized", listener);
+			};
+		}
 	},
 	bookmarks: {
 		read: (args) => electron.ipcRenderer.invoke("bookmarks:read", args),
