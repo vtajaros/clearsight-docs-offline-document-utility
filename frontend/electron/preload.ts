@@ -35,6 +35,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         },
     },
 
+    onFileSaved: (callback: (filePath: string) => void) => {
+        const listener = (_event: unknown, filePath: string) => callback(filePath)
+        ipcRenderer.on('file-saved', listener)
+        return () => {
+            ipcRenderer.removeListener('file-saved', listener)
+        }
+    },
+
     bookmarks: {
         read: (args: { path: string }) =>
             ipcRenderer.invoke('bookmarks:read', args),

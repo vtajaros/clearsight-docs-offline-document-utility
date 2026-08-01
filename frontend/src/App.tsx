@@ -59,6 +59,27 @@ export default function App() {
     onExport: () => {}
   })
 
+  // File Saved Toast State
+  const [toast, setToast] = useState<{ visible: boolean; path: string } | null>(null)
+
+  useEffect(() => {
+    if (window.electronAPI?.onFileSaved) {
+      const unsubscribe = window.electronAPI.onFileSaved((savePath) => {
+        setToast({ visible: true, path: savePath })
+      })
+      return unsubscribe
+    }
+  }, [])
+
+  useEffect(() => {
+    if (toast?.visible) {
+      const t = setTimeout(() => {
+        setToast(null)
+      }, 6000)
+      return () => clearTimeout(t)
+    }
+  }, [toast])
+
   // Backend Port logic
   const [port, setPort] = useState<number | null>(null)
 
@@ -458,6 +479,31 @@ export default function App() {
         </div>
       )}
  
+      {/* File Saved Toast Notification */}
+      {toast?.visible && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-4 bg-zinc-900/95 backdrop-blur-md border border-emerald-500/30 rounded-xl p-4 shadow-2xl max-w-md animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className="w-9 h-9 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-zinc-100">File Saved Successfully</h4>
+            <p className="text-[11px] text-zinc-400 mt-1 font-mono bg-zinc-950/60 p-2 rounded-lg border border-zinc-850/80 break-all select-text selection:bg-emerald-500/20">
+              {toast.path}
+            </p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-zinc-500 hover:text-zinc-300 p-1 rounded-lg hover:bg-zinc-800/60 transition-colors shrink-0 align-self-start cursor-pointer"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Navigation Confirm Modal */}
       <NavigationConfirmModal
         isOpen={isModalOpen}

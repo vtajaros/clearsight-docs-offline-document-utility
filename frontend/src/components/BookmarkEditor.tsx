@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useBookmarkEditor } from '../hooks/useBookmarkEditor'
-import type { BookmarkNode } from '../../types'
+import type { BookmarkNode } from '../types'
 
 interface FlatBookmarkNode {
   id: string

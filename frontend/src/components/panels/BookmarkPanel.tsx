@@ -15,7 +15,7 @@ interface BookmarkPanelProps {
   setHasUnsavedChanges: (v: boolean) => void
 }
 
-export function BookmarkPanel({ base, loading, setLoading, setError, setModal, setHasUnsavedChanges }: BookmarkPanelProps) {
+export function BookmarkPanel({ setError, setHasUnsavedChanges }: BookmarkPanelProps) {
   const [file, setFile] = useState<ElectronFile | File | null>(null)
   const [bookmarks, setBookmarks] = useState<BookmarkNode[]>([])
   const [pageCount, setPageCount] = useState<number>(0)
@@ -139,18 +139,6 @@ export function BookmarkPanel({ base, loading, setLoading, setError, setModal, s
     }
   }
 
-  const handleClearFile = () => {
-    setFile(null)
-    setBookmarks([])
-    setPageCount(0)
-    setFetchStatus('idle')
-    setHasUnsavedChanges(false)
-    setError(null)
-    setMode('view')
-    setEditingBookmarks([])
-    setNeedsOcr(false)
-    setSaveStatus('idle')
-  }
 
   const renderContent = () => {
     if (fetchStatus === 'loading') {

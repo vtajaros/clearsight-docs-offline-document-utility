@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
-import type { BookmarkNode } from '../../types'
+import type { BookmarkNode } from '../types'
 
 interface FlatBookmarkNode {
   id: string

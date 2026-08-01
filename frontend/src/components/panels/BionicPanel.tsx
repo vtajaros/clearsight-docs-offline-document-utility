@@ -57,7 +57,7 @@ export function BionicPanel({
     if ('isElectron' in file && file.isElectron) {
       formData.append('file_path', (file as ElectronFile).path)
     } else {
-      formData.append('file', file)
+      formData.append('file', file as File)
     }
     formData.append('bold_ratio', String(boldRatio))
     formData.append('job_id', uuid)

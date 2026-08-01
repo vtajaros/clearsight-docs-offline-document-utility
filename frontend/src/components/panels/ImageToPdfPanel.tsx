@@ -18,8 +18,8 @@ interface ImageToPdfPanelProps {
 export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal, setHasUnsavedChanges }: ImageToPdfPanelProps) {
   const [imageToPdfFiles, setImageToPdfFiles] = useState<any[]>([])
   const [imageToPdfPageSize, setImageToPdfPageSize] = useState<string>('A4')
-  const [imageToPdfOrientation, setImageToPdfOrientation] = useState<string>('Portrait')
-  const [imageToPdfMargin, setImageToPdfMargin] = useState<string>('Small')
+  const [imageToPdfOrientation, setImageToPdfOrientation] = useState<string>('Landscape')
+  const [imageToPdfMargin, setImageToPdfMargin] = useState<string>('None')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const fileIdMap = useRef<Map<any, string>>(new Map())

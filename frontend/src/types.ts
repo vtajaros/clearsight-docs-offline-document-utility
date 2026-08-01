@@ -48,6 +48,7 @@ declare global {
       readFile(filePath: string): Promise<ArrayBuffer>;
       getPort(): Promise<number>;
       getToken(): Promise<string>;
+      onFileSaved(callback: (filePath: string) => void): () => void;
       titlebar: {
         minimize(): Promise<void>
         maximize(): Promise<void>
@@ -139,6 +140,10 @@ export class LruCache<K, V> {
       // Map iteration order is insertion order — first key is oldest
       this.map.delete(this.map.keys().next().value!)
     }
+  }
+
+  delete(key: K): boolean {
+    return this.map.delete(key)
   }
 }
 

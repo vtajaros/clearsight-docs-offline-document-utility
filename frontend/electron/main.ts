@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, dialog, session } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as net from 'net'
@@ -34,15 +34,15 @@ async function startBackend(port: number): Promise<void> {
 
     const isWin = process.platform === 'win32'
     const venvBinDir = isWin ? 'Scripts' : 'bin'
-    const uvicornExec = isWin ? 'uvicorn.exe' : 'uvicorn'
+    const pythonExec = isWin ? 'python.exe' : 'python3'
     const backendExec = isWin ? 'backend.exe' : 'backend'
 
     const backendExecutable = isDev
-        ? path.join(backendBase, '.venv', venvBinDir, uvicornExec)
+        ? path.join(backendBase, '.venv', venvBinDir, pythonExec)
         : path.join(process.resourcesPath, 'backend', backendExec)
 
     const args = isDev
-        ? ['api:app', '--port', String(port), '--host', '127.0.0.1']
+        ? ['-m', 'uvicorn', 'api:app', '--port', String(port), '--host', '127.0.0.1']
         : ['--port', String(port), '--host', '127.0.0.1']
 
     const cwd = isDev ? backendBase : undefined
@@ -52,6 +52,10 @@ async function startBackend(port: number): Promise<void> {
         env: { ...process.env, CLEARSIGHT_API_TOKEN: apiToken },
         stdio: 'pipe',
         detached: false,
+    })
+
+    backendProcess.on('error', (err) => {
+        console.error('Failed to start backend process:', err)
     })
 
     backendProcess.stdout?.on('data', (d) => console.log('[backend]', d.toString()))
@@ -174,6 +178,14 @@ app.whenReady().then(async () => {
         },
     })
     mainWindow.maximize()
+
+    session.defaultSession.on('will-download', (_event, item) => {
+        item.on('done', (_event, state) => {
+            if (state === 'completed' && mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('file-saved', item.getSavePath())
+            }
+        })
+    })
 
     mainWindow.on('maximize', () => {
         mainWindow?.webContents.send('window-maximized', true)

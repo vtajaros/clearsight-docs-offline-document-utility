@@ -1,249 +1,195 @@
-import { BrowserWindow, Menu, app, dialog, ipcMain } from "electron";
-import { spawn } from "child_process";
-import * as path from "path";
-import * as net from "net";
-import { fileURLToPath } from "url";
-import * as fs from "fs";
-import * as crypto from "crypto";
+import { BrowserWindow as e, Menu as t, app as n, dialog as r, ipcMain as i, session as a } from "electron";
+import { spawn as o } from "child_process";
+import * as s from "path";
+import * as c from "net";
+import { fileURLToPath as l } from "url";
+import * as u from "fs";
+import * as d from "crypto";
 //#region electron/main.ts
-var apiToken = crypto.randomUUID();
-var __filename = fileURLToPath(import.meta.url);
-var __dirname = path.dirname(__filename);
-var backendProcess = null;
-var mainWindow = null;
-function findFreePort() {
-	return new Promise((resolve, reject) => {
-		const server = net.createServer();
-		server.listen(0, "127.0.0.1", () => {
-			const address = server.address();
-			const port = typeof address === "object" && address ? address.port : null;
-			server.close(() => {
-				if (port) resolve(port);
-				else reject(/* @__PURE__ */ new Error("Could not find free port"));
+var f = d.randomUUID(), p = l(import.meta.url), m = s.dirname(p), h = null, g = null;
+function _() {
+	return new Promise((e, t) => {
+		let n = c.createServer();
+		n.listen(0, "127.0.0.1", () => {
+			let r = n.address(), i = typeof r == "object" && r ? r.port : null;
+			n.close(() => {
+				i ? e(i) : t(/* @__PURE__ */ Error("Could not find free port"));
 			});
 		});
 	});
 }
-async function startBackend(port) {
-	const isDev = !!process.env.VITE_DEV_SERVER_URL;
-	const backendBase = path.join(app.getAppPath(), "..", "backend");
-	const isWin = process.platform === "win32";
-	const venvBinDir = isWin ? "Scripts" : "bin";
-	const uvicornExec = isWin ? "uvicorn.exe" : "uvicorn";
-	const backendExec = isWin ? "backend.exe" : "backend";
-	backendProcess = spawn(isDev ? path.join(backendBase, ".venv", venvBinDir, uvicornExec) : path.join(process.resourcesPath, "backend", backendExec), isDev ? [
+async function v(e) {
+	let t = !!process.env.VITE_DEV_SERVER_URL, r = s.join(n.getAppPath(), "..", "backend"), i = process.platform === "win32", a = i ? "Scripts" : "bin", c = i ? "python.exe" : "python3", l = i ? "backend.exe" : "backend";
+	h = o(t ? s.join(r, ".venv", a, c) : s.join(process.resourcesPath, "backend", l), t ? [
+		"-m",
+		"uvicorn",
 		"api:app",
 		"--port",
-		String(port),
+		String(e),
 		"--host",
 		"127.0.0.1"
 	] : [
 		"--port",
-		String(port),
+		String(e),
 		"--host",
 		"127.0.0.1"
 	], {
-		cwd: isDev ? backendBase : void 0,
+		cwd: t ? r : void 0,
 		env: {
 			...process.env,
-			CLEARSIGHT_API_TOKEN: apiToken
+			CLEARSIGHT_API_TOKEN: f
 		},
 		stdio: "pipe",
-		detached: false
-	});
-	backendProcess.stdout?.on("data", (d) => console.log("[backend]", d.toString()));
-	backendProcess.stderr?.on("data", (d) => console.error("[backend]", d.toString()));
-	await waitForBackend(port);
+		detached: !1
+	}), h.on("error", (e) => {
+		console.error("Failed to start backend process:", e);
+	}), h.stdout?.on("data", (e) => console.log("[backend]", e.toString())), h.stderr?.on("data", (e) => console.error("[backend]", e.toString())), await y(e);
 }
-function waitForBackend(port, retries = 40, intervalMs = 500) {
-	return new Promise((resolve, reject) => {
-		let attempts = 0;
-		const check = () => {
-			const sock = net.createConnection({
-				port,
+function y(e, t = 40, n = 500) {
+	return new Promise((r, i) => {
+		let a = 0, o = () => {
+			let s = c.createConnection({
+				port: e,
 				host: "127.0.0.1"
 			});
-			sock.on("connect", () => {
-				sock.destroy();
-				resolve();
-			});
-			sock.on("error", () => {
-				if (++attempts >= retries) reject(/* @__PURE__ */ new Error("Backend did not start in time"));
-				else setTimeout(check, intervalMs);
+			s.on("connect", () => {
+				s.destroy(), r();
+			}), s.on("error", () => {
+				++a >= t ? i(/* @__PURE__ */ Error("Backend did not start in time")) : setTimeout(o, n);
 			});
 		};
-		check();
+		o();
 	});
 }
-function killBackend() {
-	if (backendProcess) {
-		const pid = backendProcess.pid;
-		if (pid) if (process.platform === "win32") spawn("taskkill", [
+function b() {
+	if (h) {
+		let e = h.pid;
+		e && (process.platform === "win32" ? o("taskkill", [
 			"/pid",
-			String(pid),
+			String(e),
 			"/t",
 			"/f"
-		], { stdio: "ignore" });
-		else backendProcess.kill("SIGTERM");
-		backendProcess = null;
+		], { stdio: "ignore" }) : h.kill("SIGTERM")), h = null;
 	}
 }
-var lastUsedDirectory = void 0;
-var allowedReadPaths = /* @__PURE__ */ new Set();
-function getMimeType(filePath) {
-	const ext = path.extname(filePath).toLowerCase();
-	if (ext === ".pdf") return "application/pdf";
-	if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-	if (ext === ".png") return "image/png";
-	if (ext === ".webp") return "image/webp";
-	return "application/octet-stream";
+var x = void 0, S = /* @__PURE__ */ new Set();
+function C(e) {
+	let t = s.extname(e).toLowerCase();
+	return t === ".pdf" ? "application/pdf" : t === ".jpg" || t === ".jpeg" ? "image/jpeg" : t === ".png" ? "image/png" : t === ".webp" ? "image/webp" : "application/octet-stream";
 }
-ipcMain.handle("dialog:openFiles", async (_event, options) => {
-	const { canceled, filePaths } = await dialog.showOpenDialog({
-		defaultPath: lastUsedDirectory,
-		properties: options.multiSelections ? ["openFile", "multiSelections"] : ["openFile"],
-		filters: options.filters ?? [{
+i.handle("dialog:openFiles", async (e, t) => {
+	let { canceled: n, filePaths: i } = await r.showOpenDialog({
+		defaultPath: x,
+		properties: t.multiSelections ? ["openFile", "multiSelections"] : ["openFile"],
+		filters: t.filters ?? [{
 			name: "All Files",
 			extensions: ["*"]
 		}]
 	});
-	if (!canceled && filePaths.length > 0) {
-		lastUsedDirectory = path.dirname(filePaths[0]);
-		filePaths.forEach((p) => allowedReadPaths.add(p));
-	}
-	if (canceled) return [];
-	return filePaths.flatMap((filePath) => {
-		let stats;
+	return !n && i.length > 0 && (x = s.dirname(i[0]), i.forEach((e) => S.add(e))), n ? [] : i.flatMap((e) => {
+		let t;
 		try {
-			stats = fs.statSync(filePath);
+			t = u.statSync(e);
 		} catch {
 			return [];
 		}
 		return [{
-			path: filePath,
-			name: path.basename(filePath),
-			size: stats.size,
-			type: getMimeType(filePath),
-			isElectron: true,
-			lastModified: stats.mtimeMs,
-			createdAt: stats.birthtimeMs
+			path: e,
+			name: s.basename(e),
+			size: t.size,
+			type: C(e),
+			isElectron: !0,
+			lastModified: t.mtimeMs,
+			createdAt: t.birthtimeMs
 		}];
 	});
-});
-ipcMain.handle("file:read", async (_event, filePath) => {
-	if (!allowedReadPaths.has(filePath)) throw new Error(`Access denied: ${filePath} was not selected by the user.`);
-	const buffer = await fs.promises.readFile(filePath);
-	return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-});
-app.whenReady().then(async () => {
-	const port = await findFreePort();
-	await startBackend(port);
-	ipcMain.handle("get-port", () => port);
-	ipcMain.handle("get-token", () => apiToken);
-	Menu.setApplicationMenu(null);
-	mainWindow = new BrowserWindow({
+}), i.handle("file:read", async (e, t) => {
+	if (!S.has(t)) throw Error(`Access denied: ${t} was not selected by the user.`);
+	let n = await u.promises.readFile(t);
+	return n.buffer.slice(n.byteOffset, n.byteOffset + n.byteLength);
+}), n.whenReady().then(async () => {
+	let r = await _();
+	await v(r), i.handle("get-port", () => r), i.handle("get-token", () => f), t.setApplicationMenu(null), g = new e({
 		width: 1200,
 		height: 800,
 		minWidth: 800,
 		minHeight: 500,
-		frame: false,
+		frame: !1,
 		transparent: process.platform === "linux",
 		titleBarStyle: "hidden",
-		icon: path.join(app.getAppPath(), "..", "icon.png"),
-		autoHideMenuBar: true,
+		icon: s.join(n.getAppPath(), "..", "icon.png"),
+		autoHideMenuBar: !0,
 		webPreferences: {
-			preload: path.join(__dirname, "preload.mjs"),
-			contextIsolation: true,
-			nodeIntegration: false
+			preload: s.join(m, "preload.mjs"),
+			contextIsolation: !0,
+			nodeIntegration: !1
 		}
-	});
-	mainWindow.maximize();
-	mainWindow.on("maximize", () => {
-		mainWindow?.webContents.send("window-maximized", true);
-	});
-	mainWindow.on("unmaximize", () => {
-		mainWindow?.webContents.send("window-maximized", false);
-	});
-	ipcMain.handle("titlebar:minimize", () => mainWindow?.minimize());
-	ipcMain.handle("titlebar:isMaximized", () => mainWindow?.isMaximized() ?? false);
-	ipcMain.handle("titlebar:maximize", () => {
-		if (mainWindow?.isMaximized()) mainWindow.restore();
-		else mainWindow?.maximize();
-	});
-	ipcMain.handle("titlebar:close", () => mainWindow?.close());
-	ipcMain.handle("bookmarks:read", async (_event, { path }) => {
-		const url = `http://127.0.0.1:${port}/bookmarks/read?path=${encodeURIComponent(path)}`;
-		const res = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } });
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({}));
-			throw new Error(err.detail || `bookmarks:read failed: ${res.status}`);
+	}), g.maximize(), a.defaultSession.on("will-download", (e, t) => {
+		t.on("done", (e, n) => {
+			n === "completed" && g && !g.isDestroyed() && g.webContents.send("file-saved", t.getSavePath());
+		});
+	}), g.on("maximize", () => {
+		g?.webContents.send("window-maximized", !0);
+	}), g.on("unmaximize", () => {
+		g?.webContents.send("window-maximized", !1);
+	}), i.handle("titlebar:minimize", () => g?.minimize()), i.handle("titlebar:isMaximized", () => g?.isMaximized() ?? !1), i.handle("titlebar:maximize", () => {
+		g?.isMaximized() ? g.restore() : g?.maximize();
+	}), i.handle("titlebar:close", () => g?.close()), i.handle("bookmarks:read", async (e, { path: t }) => {
+		let n = `http://127.0.0.1:${r}/bookmarks/read?path=${encodeURIComponent(t)}`, i = await fetch(n, { headers: { Authorization: `Bearer ${f}` } });
+		if (!i.ok) {
+			let e = await i.json().catch(() => ({}));
+			throw Error(e.detail || `bookmarks:read failed: ${i.status}`);
 		}
-		return res.json();
-	});
-	ipcMain.handle("bookmarks:write", async (_event, { sourcePath, overwrite, bookmarks }) => {
-		const tmpOutputPath = path.join(app.getPath("temp"), `clearsight_bm_${Date.now()}_${path.basename(sourcePath)}`);
-		const res = await fetch(`http://127.0.0.1:${port}/bookmarks/write`, {
+		return i.json();
+	}), i.handle("bookmarks:write", async (e, { sourcePath: t, overwrite: i, bookmarks: a }) => {
+		let o = s.join(n.getPath("temp"), `clearsight_bm_${Date.now()}_${s.basename(t)}`), c = await fetch(`http://127.0.0.1:${r}/bookmarks/write`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				Authorization: `Bearer ${apiToken}`
+				Authorization: `Bearer ${f}`
 			},
 			body: JSON.stringify({
-				source_path: sourcePath,
-				output_path: tmpOutputPath,
-				bookmarks
+				source_path: t,
+				output_path: o,
+				bookmarks: a
 			})
 		});
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({}));
-			throw new Error(err.detail || `bookmarks:write failed: ${res.status}`);
+		if (!c.ok) {
+			let e = await c.json().catch(() => ({}));
+			throw Error(e.detail || `bookmarks:write failed: ${c.status}`);
 		}
-		const arrayBuffer = await res.arrayBuffer();
-		const buffer = Buffer.from(arrayBuffer);
-		await fs.promises.writeFile(tmpOutputPath, buffer);
-		if (overwrite) {
+		let l = await c.arrayBuffer(), d = Buffer.from(l);
+		if (await u.promises.writeFile(o, d), i) {
 			try {
-				await fs.promises.rename(tmpOutputPath, sourcePath);
-			} catch (err) {
-				if (err.code === "EXDEV") {
-					await fs.promises.copyFile(tmpOutputPath, sourcePath);
-					await fs.promises.unlink(tmpOutputPath).catch(() => {});
-				} else throw err;
+				await u.promises.rename(o, t);
+			} catch (e) {
+				if (e.code === "EXDEV") await u.promises.copyFile(o, t), await u.promises.unlink(o).catch(() => {});
+				else throw e;
 			}
-			allowedReadPaths.add(sourcePath);
-			return {
-				success: true,
-				outputPath: sourcePath
+			return S.add(t), {
+				success: !0,
+				outputPath: t
 			};
-		} else {
-			allowedReadPaths.add(tmpOutputPath);
-			return {
-				success: true,
-				outputPath: tmpOutputPath
-			};
-		}
-	});
-	ipcMain.handle("bookmarks:extract", async (_event, { path: pdfPath }) => {
-		const res = await fetch(`http://127.0.0.1:${port}/bookmarks/extract`, {
+		} else return S.add(o), {
+			success: !0,
+			outputPath: o
+		};
+	}), i.handle("bookmarks:extract", async (e, { path: t }) => {
+		let n = await fetch(`http://127.0.0.1:${r}/bookmarks/extract`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				Authorization: `Bearer ${apiToken}`
+				Authorization: `Bearer ${f}`
 			},
-			body: JSON.stringify({ path: pdfPath })
+			body: JSON.stringify({ path: t })
 		});
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({}));
-			throw new Error(err.detail || `bookmarks:extract failed: ${res.status}`);
+		if (!n.ok) {
+			let e = await n.json().catch(() => ({}));
+			throw Error(e.detail || `bookmarks:extract failed: ${n.status}`);
 		}
-		return res.json();
-	});
-	if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-	else mainWindow.loadFile("dist/index.html");
-});
-app.on("window-all-closed", () => {
-	killBackend();
-	if (process.platform !== "darwin") app.quit();
-});
-app.on("before-quit", killBackend);
+		return n.json();
+	}), process.env.VITE_DEV_SERVER_URL ? g.loadURL(process.env.VITE_DEV_SERVER_URL) : g.loadFile("dist/index.html");
+}), n.on("window-all-closed", () => {
+	b(), process.platform !== "darwin" && n.quit();
+}), n.on("before-quit", b);
 //#endregion

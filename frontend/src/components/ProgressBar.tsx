@@ -1,4 +1,3 @@
-import { useRef, useEffect } from 'react'
 
 interface ProgressBarProps {
   loading: boolean

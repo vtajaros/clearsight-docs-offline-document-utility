@@ -11,7 +11,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).href
 
-function PdfSimplePreview({ pdfDoc, pageNumber, label }: { pdfDoc: pdfjsLib.PDFDocumentProxy | null, pageNumber: number, label: string }) {
+function PdfSimplePreview({ pdfDoc, pageNumber, label: _label }: { pdfDoc: pdfjsLib.PDFDocumentProxy | null, pageNumber: number, label: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   
   useEffect(() => {

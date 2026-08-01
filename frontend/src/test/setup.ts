@@ -12,11 +12,18 @@ globalThis.window.electronAPI = {
   openFiles: vi.fn(),
   readFile: vi.fn(),
   getPort: vi.fn().mockResolvedValue(8000),
+  getToken: vi.fn().mockResolvedValue('mock-token'),
+  onFileSaved: vi.fn().mockReturnValue(() => {}),
   titlebar: {
     minimize: vi.fn(),
     maximize: vi.fn(),
     close: vi.fn(),
     isMaximized: vi.fn().mockResolvedValue(true),
     onMaximizedChange: vi.fn().mockReturnValue(() => {}),
+  },
+  bookmarks: {
+    read: vi.fn(),
+    write: vi.fn(),
+    extract: vi.fn(),
   },
 }
