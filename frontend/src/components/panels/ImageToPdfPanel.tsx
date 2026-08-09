@@ -1,5 +1,5 @@
 // frontend/src/components/panels/ImageToPdfPanel.tsx
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { DragEvent } from 'react'
 import { type CompletionModal, formatBytes, pickFiles, imageThumbnailCache } from '../../types'
 import { ImageThumbnail } from '../Thumbnails'
@@ -22,8 +22,47 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
   const [imageToPdfMargin, setImageToPdfMargin] = useState<string>('None')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [previewImageFile, setPreviewImageFile] = useState<any | null>(null)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
   const fileIdMap = useRef<Map<any, string>>(new Map())
   const { progress, label: progressLabel, start: startProgress, finish: finishProgress, cancel: cancelProgress } = useSimulatedProgress()
+
+  useEffect(() => {
+    if (!previewImageFile) {
+      if (previewImageUrl) {
+        URL.revokeObjectURL(previewImageUrl)
+        setPreviewImageUrl(null)
+      }
+      return
+    }
+    let active = true
+    async function load() {
+      let url = ''
+      if (previewImageFile.isElectron) {
+        if (window.electronAPI?.readFile) {
+          const arrayBuffer = await window.electronAPI.readFile(previewImageFile.path)
+          if (!active) return
+          const blob = new Blob([arrayBuffer])
+          url = URL.createObjectURL(blob)
+        }
+      } else {
+        url = URL.createObjectURL(previewImageFile)
+      }
+      if (active) setPreviewImageUrl(url)
+    }
+    load()
+    return () => { active = false }
+  }, [previewImageFile])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && previewImageFile) {
+        setPreviewImageFile(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [previewImageFile])
 
   const getFileId = (file: any): string => {
     if (!fileIdMap.current.has(file)) {
@@ -45,7 +84,16 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
         }
       }
       if (validFiles.length > 0) {
-        setImageToPdfFiles((prev) => [...prev, ...validFiles])
+        validFiles.sort((a, b) => {
+          const dateA = a.lastModified || (a as any).createdAt || 0
+          const dateB = b.lastModified || (b as any).createdAt || 0
+          return dateA - dateB
+        })
+        setImageToPdfFiles((prev) => {
+          // If this is the first batch, they are already sorted.
+          // If there are existing files, we just append the newly sorted batch.
+          return [...prev, ...validFiles]
+        })
         setError(null)
         setHasUnsavedChanges?.(true)
       } else setError('Only image files (JPG/PNG) are supported.')
@@ -164,7 +212,12 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
       multiple: true,
     });
     if (result && result.length > 0) {
-      setImageToPdfFiles((prev) => [...prev, ...result])
+      const sortedResult = [...result].sort((a, b) => {
+        const dateA = a.lastModified || (a as any).createdAt || 0
+        const dateB = b.lastModified || (b as any).createdAt || 0
+        return dateA - dateB
+      })
+      setImageToPdfFiles((prev) => [...prev, ...sortedResult])
       setError(null)
       setHasUnsavedChanges?.(true)
     }
@@ -248,7 +301,10 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
                       </svg>
                     </button>
 
-                    <div className="relative w-full aspect-[3/4] bg-zinc-800/40 rounded-lg overflow-hidden flex items-center justify-center border border-zinc-800/80">
+                    <div 
+                      className="relative w-full aspect-[3/4] bg-zinc-800/40 rounded-lg overflow-hidden flex items-center justify-center border border-zinc-800/80 cursor-pointer hover:border-violet-500/50 transition-colors"
+                      onClick={() => setPreviewImageFile(file)}
+                    >
                       <ImageThumbnail file={file} fileId={fileId} />
                     </div>
 
@@ -304,6 +360,35 @@ export function ImageToPdfPanel({ base, loading, setLoading, setError, setModal,
               className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-violet-500 hover:bg-violet-600 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-violet-950/10 cursor-pointer"
             >
               {loading ? 'Generating PDF...' : 'Convert Images to PDF'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewImageFile && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8 backdrop-blur-sm"
+          onClick={() => setPreviewImageFile(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            {previewImageUrl ? (
+              <img 
+                src={previewImageUrl} 
+                alt={previewImageFile.name || 'Preview'} 
+                className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              />
+            ) : (
+              <div className="w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+            )}
+            <button
+              onClick={() => setPreviewImageFile(null)}
+              className="absolute -top-4 -right-4 w-8 h-8 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-full shadow-lg border border-zinc-700/50 transition-colors cursor-pointer z-10"
+              title="Close preview"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
         </div>
