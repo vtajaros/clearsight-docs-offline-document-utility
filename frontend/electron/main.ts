@@ -180,6 +180,11 @@ app.whenReady().then(async () => {
     mainWindow.maximize()
 
     session.defaultSession.on('will-download', (_event, item) => {
+        if (lastUsedDirectory) {
+            item.setSaveDialogOptions({
+                defaultPath: path.join(lastUsedDirectory, item.getFilename())
+            })
+        }
         item.on('done', (_event, state) => {
             if (state === 'completed' && mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('file-saved', item.getSavePath())
